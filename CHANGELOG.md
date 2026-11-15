@@ -9,3 +9,4 @@ versionado: [SemVer](https://semver.org/lang/es/).
 ### Añadido
 - Esqueleto del workspace y CI multiplataforma.
 - Spike de PTY (portable-pty + vt100 + tui-term) con respuesta a consultas de terminal.
+- Spike de ACP: cliente con SDK 5.3 sobre `ByteStreams`, contención de rutas `fs/*` y agente fixture.
