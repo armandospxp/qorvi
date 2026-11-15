@@ -1,0 +1,39 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 120, 35)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ Review · APP-12 · 3 archivos ────────────────────────────────────────────────────────────────────────────────────────┐
+│┌ Archivos ─────────────────────────────┐┌ src/lib.rs · modificado ──────────────────────────────────────────────────┐│
+││›M src/lib.rs                          ││--- a/src/lib.rs                                                           ││
+││ A src/session.rs                      ││+++ b/src/lib.rs                                                           ││
+││ ? notas.txt                           ││@@ -4,7 +4,12 @@ mod session;                                              ││
+││                                       ││                                                                           ││
+││                                       ││-pub fn validate_name(name: &str) -> bool {                                ││
+││                                       ││-    !name.is_empty()                                                      ││
+││                                       ││+pub fn validate_name(name: &str) -> Result<(), String> {                  ││
+││                                       ││+    if name.is_empty() {                                                  ││
+││                                       ││+        return Err("nombre vacío".to_string());                           ││
+││                                       ││+    }                                                                     ││
+││                                       ││+    Ok(())                                                                ││
+││                                       ││ }                                                                         ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+││                                       ││                                                                           ││
+│└───────────────────────────────────────┘└───────────────────────────────────────────────────────────────────────────┘│
+│ j/k mover · c commit · m merge · p push+PR · x descartar · Esc cerrar                                                │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ DEMO  │ APP-12 │ qorvi/APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: F1

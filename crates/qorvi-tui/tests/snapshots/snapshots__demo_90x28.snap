@@ -1,0 +1,32 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&state(), 90, 28)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ nvim · src/main.rs ────────────────────────────┐┌ Agente · claude · ● trabajando ──────┐
+│  1 use std::io;                                ││› Mejora la validación del nombre de  │
+│  2                                             ││  tarea en src/lib.rs                 │
+│  3 mod config;                                 ││                                      │
+│  4 mod session;                                ││  Voy a leer el módulo actual y       │
+│  5                                             ││  después aplico el cambio con errores│
+│  6 /// Valida el nombre de una tarea nueva.    ││  descriptivos.                       │
+│  7 pub fn validate_name(name: &str) -> Result<…││                                      │
+│  8     if name.is_empty() {                    ││▸ Leer src/main.rs (read) ✓ completado│
+│  9         return Err("nombre vacío".to_string…││                                      │
+│ 10     }                                       ││▾ Editar src/lib.rs (edit) ● en curso │
+│ 11     if name.contains('/') || name.contains(…││    tipo: edit · estado: en curso     │
+│ 12         return Err("carácter no permitido".…││                                      │
+│ 13     }                                       ││                                      │
+│ 14     Ok(())                                  ││                                      │
+│ 15 }                                           ││                                      │
+│ 16                                             ││                                      │
+│ 17 fn main() -> io::Result<()> {               ││                                      │
+│ 18     let cfg = config::load()?;              ││                                      │
+│ 19     session::run(cfg)                       ││                                      │
+│ 20 }                                           ││                                      │
+│~                                               ││┌ Mensaje · Enter envía · Alt+Enter …┐│
+│~                                               │││Escribe un mensaje…                 ││
+│~                                               ││└────────────────────────────────────┘│
+└────────────────────────────────────────────────┘└──────────────────────────────────────┘
+ ▸ Terminal (minimizada) · Alt+t para desplegar
+ DEMO  │ APP-12 │ qorvi/APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: F1
