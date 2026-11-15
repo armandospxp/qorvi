@@ -1,5 +1,7 @@
 //! Estado de la aplicación: dato puro, sin IO.
 
+use std::collections::BTreeSet;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentStatus {
     Disconnected,
@@ -13,6 +15,7 @@ pub enum AgentStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
+    Explorer,
     Editor,
     Agent,
     Terminal,
@@ -21,6 +24,7 @@ pub enum Pane {
 impl Pane {
     pub fn label(self) -> &'static str {
         match self {
+            Pane::Explorer => "Archivos",
             Pane::Editor => "Editor",
             Pane::Agent => "Agente",
             Pane::Terminal => "Terminal",
@@ -55,6 +59,42 @@ pub enum ChatItem {
     Notice(String),
 }
 
+/// Marca de cambio de un archivo en el explorador (como `git status`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeMark {
+    Modified,
+    Added,
+    Deleted,
+    Untracked,
+}
+
+impl ChangeMark {
+    pub fn letter(self) -> char {
+        match self {
+            ChangeMark::Modified => 'M',
+            ChangeMark::Added => 'A',
+            ChangeMark::Deleted => 'D',
+            ChangeMark::Untracked => '?',
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileEntry {
+    /// Relativa al worktree, con `/` como separador.
+    pub path: String,
+    pub mark: Option<ChangeMark>,
+}
+
+/// Estado de interfaz del explorador de una tarea.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExplorerState {
+    /// Rutas de las carpetas expandidas.
+    pub expanded: BTreeSet<String>,
+    /// Índice dentro de las filas visibles.
+    pub selected: usize,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Task {
     pub name: String,
@@ -67,6 +107,10 @@ pub struct Task {
     pub editor_lines: Vec<String>,
     pub terminal_lines: Vec<String>,
     pub cost_usd: f64,
+    pub files: Vec<FileEntry>,
+    pub explorer: ExplorerState,
+    /// Archivo abierto en el editor (simulado en la demo).
+    pub editor_file: Option<String>,
 }
 
 impl Task {
@@ -86,6 +130,9 @@ impl Task {
             ],
             terminal_lines: vec!["$ ".to_string()],
             cost_usd: 0.0,
+            files: Vec::new(),
+            explorer: ExplorerState::default(),
+            editor_file: None,
         }
     }
 }
@@ -174,6 +221,8 @@ pub struct AppState {
     pub focus: Pane,
     pub zoom: bool,
     pub terminal_minimized: bool,
+    /// Alternancia del usuario sobre el valor por defecto del tier (Alt+e).
+    pub explorer_toggled: bool,
     pub modal: Modal,
     pub toasts: Vec<Toast>,
     pub last_toast: Option<Toast>,
@@ -184,9 +233,25 @@ pub struct AppState {
     /// Lo fija el bucle de eventos según el tamaño de la terminal; `update` lo
     /// necesita para saber si Alt+h/l recorren paneles (layout compacto).
     pub compact: bool,
+    /// Lo fija el bucle de eventos: el explorador es visible por defecto en el tier completo.
+    pub explorer_default: bool,
 }
 
 impl AppState {
+    /// ¿Se dibuja el explorador como columna? (en compacto es una pestaña).
+    pub fn explorer_visible(&self) -> bool {
+        !self.compact && (self.explorer_default ^ self.explorer_toggled)
+    }
+
+    /// Aplica el tier de la terminal; si el explorador queda oculto, saca de él el foco.
+    pub fn set_layout(&mut self, compact: bool, explorer_default: bool) {
+        self.compact = compact;
+        self.explorer_default = explorer_default;
+        if self.focus == Pane::Explorer && !compact && !self.explorer_visible() {
+            self.focus = Pane::Editor;
+        }
+    }
+
     pub fn active_task(&self) -> Option<&Task> {
         self.tasks.get(self.active)
     }

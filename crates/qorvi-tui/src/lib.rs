@@ -2,6 +2,7 @@
 
 pub mod action;
 pub mod demo;
+pub mod explorer;
 pub mod keymap;
 pub mod state;
 pub mod theme;
@@ -31,7 +32,8 @@ pub fn run_demo() -> io::Result<()> {
 fn run(terminal: &mut DefaultTerminal, mut state: AppState) -> io::Result<()> {
     loop {
         let size = terminal.size()?;
-        state.compact = view::is_compact(size.width, size.height);
+        let tier = view::tier(size.width, size.height);
+        state.set_layout(tier == view::Tier::Compact, tier == view::Tier::Full);
         terminal.draw(|frame| view::view(&state, frame))?;
 
         let action = if event::poll(TICK)? {

@@ -13,6 +13,7 @@ pub enum Action {
     OpenReview,
     ToggleZoom,
     ToggleTerminal,
+    ToggleExplorer,
     ShowLastToast,
     Quit,
     Help,

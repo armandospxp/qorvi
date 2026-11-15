@@ -1,0 +1,39 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 120, 35)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ Archivos ────────────┐┌ nvim · src/main.rs ───────────────────────────────┐┌ Agente · claude · ● trabajando ─────────┐
+│ ▸ .github/           ││  1 use std::io;                                   ││› Mejora la validación del nombre de     │
+│ ▾ src/ •             ││  2                                                ││  tarea en src/lib.rs                    │
+│   ▾ util/            ││  3 mod config;                                    ││                                         │
+│       fs.rs          ││  4 mod session;                                   ││  Voy a leer el módulo actual y después  │
+│       mod.rs         ││  5                                                ││  aplico el cambio con errores           │
+│     config.rs        ││  6 /// Valida el nombre de una tarea nueva.       ││  descriptivos.                          │
+│   M lib.rs           ││  7 pub fn validate_name(name: &str) -> Result<(),…││                                         │
+│     main.rs          ││  8     if name.is_empty() {                       ││▸ Leer src/main.rs (read) ✓ completado   │
+│   A session.rs       ││  9         return Err("nombre vacío".to_string());││                                         │
+│›▸ tests/             ││ 10     }                                          ││▾ Editar src/lib.rs (edit) ● en curso    │
+│   .gitignore         ││ 11     if name.contains('/') || name.contains(' '…││    tipo: edit · estado: en curso        │
+│   Cargo.toml         ││ 12         return Err("carácter no permitido".to_…││                                         │
+│   README.md          ││ 13     }                                          ││                                         │
+│ ? notas.txt          ││ 14     Ok(())                                     ││                                         │
+│                      ││ 15 }                                              ││                                         │
+│                      ││ 16                                                ││                                         │
+│                      ││ 17 fn main() -> io::Result<()> {                  ││                                         │
+│                      ││ 18     let cfg = config::load()?;                 ││                                         │
+│                      ││ 19     session::run(cfg)                          ││                                         │
+│                      ││ 20 }                                              ││┌ Mensaje · Enter envía · Alt+Enter sal…┐│
+│                      ││~                                                  │││Escribe un mensaje…                    ││
+│                      ││~                                                  ││└───────────────────────────────────────┘│
+└──────────────────────┘└───────────────────────────────────────────────────┘└─────────────────────────────────────────┘
+┌ zsh ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│test config::tests::loads_defaults ... ok                                                                             │
+│test config::tests::rejects_unknown_agent ... ok                                                                      │
+│test session::tests::validates_names ... ok                                                                           │
+│test session::tests::resumes_task ... ok                                                                              │
+│                                                                                                                      │
+│test result: ok. 4 passed; 0 failed; 0 ignored                                                                        │
+│$                                                                                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: F1

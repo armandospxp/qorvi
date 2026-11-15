@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
-use super::{chat, fg, truncate};
+use super::{chat, explorer, fg, truncate};
 use crate::state::{AppState, Pane};
 use crate::theme::{color, status_label, status_symbol, Token};
 
@@ -34,6 +34,7 @@ pub fn render_pane(state: &AppState, frame: &mut Frame, area: Rect, pane: Pane) 
     }
     let focused = state.focus == pane;
     match pane {
+        Pane::Explorer => explorer::render(state, frame, area, focused),
         Pane::Editor => render_editor(state, frame, area, focused),
         Pane::Terminal => render_terminal(state, frame, area, focused),
         Pane::Agent => chat::render(state, frame, area, focused),
@@ -41,7 +42,11 @@ pub fn render_pane(state: &AppState, frame: &mut Frame, area: Rect, pane: Pane) 
 }
 
 fn render_editor(state: &AppState, frame: &mut Frame, area: Rect, focused: bool) {
-    let block = pane_block(" nvim · src/main.rs ", focused, area.width);
+    let title = match state.active_task().and_then(|t| t.editor_file.as_deref()) {
+        Some(file) => format!(" nvim · {file} "),
+        None => " nvim ".to_string(),
+    };
+    let block = pane_block(&title, focused, area.width);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let Some(task) = state.active_task() else {
@@ -113,13 +118,18 @@ pub fn render_tabs(state: &AppState, frame: &mut Frame, area: Rect) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let mut spans = vec![Span::raw(" ")];
-    for (i, pane) in [Pane::Editor, Pane::Agent, Pane::Terminal]
+    // Por debajo de 48 columnas no caben las cuatro pestañas con holgura.
+    let tight = area.width < 48;
+    let mut spans = vec![Span::raw(if tight { "" } else { " " })];
+    for (i, pane) in [Pane::Explorer, Pane::Editor, Pane::Agent, Pane::Terminal]
         .into_iter()
         .enumerate()
     {
         if i > 0 {
-            spans.push(Span::styled(" | ", fg(Token::Border)));
+            spans.push(Span::styled(
+                if tight { "|" } else { " | " },
+                fg(Token::Border),
+            ));
         }
         let style = if pane == state.focus {
             Style::default()
@@ -129,7 +139,12 @@ pub fn render_tabs(state: &AppState, frame: &mut Frame, area: Rect) {
         } else {
             fg(Token::Muted)
         };
-        spans.push(Span::styled(format!(" {} ", pane.label()), style));
+        let label = if tight {
+            pane.label().to_string()
+        } else {
+            format!(" {} ", pane.label())
+        };
+        spans.push(Span::styled(label, style));
     }
     if let Some(task) = state.active_task() {
         spans.push(Span::styled(

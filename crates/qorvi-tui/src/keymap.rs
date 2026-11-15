@@ -18,6 +18,7 @@ pub fn map_key(_state: &AppState, key: KeyEvent) -> Action {
                 'd' => return Action::OpenReview,
                 'z' => return Action::ToggleZoom,
                 't' => return Action::ToggleTerminal,
+                'e' => return Action::ToggleExplorer,
                 'm' => return Action::ShowLastToast,
                 'q' => return Action::Quit,
                 _ => {}
@@ -57,6 +58,17 @@ mod tests {
             map_key(&s, key(KeyCode::Char('9'), KeyModifiers::ALT)),
             Action::SelectTask(8)
         );
+    }
+
+    #[test]
+    fn alt_e_toggles_explorer() {
+        let s = demo_state();
+        assert_eq!(
+            map_key(&s, key(KeyCode::Char('e'), KeyModifiers::ALT)),
+            Action::ToggleExplorer
+        );
+        let plain = key(KeyCode::Char('e'), KeyModifiers::NONE);
+        assert_eq!(map_key(&s, plain), Action::Key(plain));
     }
 
     #[test]

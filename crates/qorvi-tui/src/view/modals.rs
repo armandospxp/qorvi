@@ -10,13 +10,14 @@ use super::{bold, centered, fg, tail, text_width, truncate, wrap};
 use crate::state::{AppState, Modal};
 use crate::theme::{color, Token};
 
-const HELP: [(&str, &str); 14] = [
+const HELP: [(&str, &str); 17] = [
     ("Alt+h/j/k/l", "mover el foco entre paneles"),
     ("Alt+1..9", "ir a la tarea N"),
     ("Alt+n", "nueva tarea"),
     ("Alt+d", "review / diff"),
     ("Alt+z", "zoom del panel"),
     ("Alt+t", "mostrar/ocultar la terminal"),
+    ("Alt+e", "mostrar/ocultar el explorador de archivos"),
     ("Alt+m", "ver de nuevo el último aviso"),
     ("Alt+q", "salir"),
     ("F1", "esta ayuda"),
@@ -25,6 +26,11 @@ const HELP: [(&str, &str); 14] = [
     ("Alt+Enter", "salto de línea en el mensaje"),
     ("Esc", "cancelar el turno / cerrar diálogo"),
     ("↑/↓", "elegir opción de un permiso"),
+    ("j/k ↑/↓", "explorador: mover la selección"),
+    (
+        "Enter/l h r",
+        "explorador: abrir · contraer/subir · refrescar",
+    ),
 ];
 
 fn dialog<'a>(title: &str, area: Rect, token: Token) -> Block<'a> {
