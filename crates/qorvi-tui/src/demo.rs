@@ -3,7 +3,7 @@
 use crate::explorer::{visible_rows, RowKind};
 use crate::state::{
     AgentStatus, AppState, ChangeKind, ChangeMark, ChangedFile, ChatItem, FileEntry, Modal, Pane,
-    Task, ToolStatus,
+    ShortcutStyle, Task, ToolStatus,
 };
 
 fn lines(items: &[&str]) -> Vec<String> {
@@ -265,6 +265,11 @@ pub fn demo_state() -> AppState {
         demo: true,
         should_quit: false,
         ascii: std::env::var("QORVI_ASCII").is_ok_and(|v| v == "1"),
+        shortcut_style: std::env::var("QORVI_KEYS")
+            .ok()
+            .and_then(|v| ShortcutStyle::from_env_value(&v))
+            .unwrap_or_else(ShortcutStyle::os_default),
+        prefix_pending: false,
         compact: false,
         explorer_default: true,
     }

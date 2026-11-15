@@ -14,6 +14,10 @@ pub enum Effect {
 
 pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
     let modal_open = state.modal != Modal::None;
+    // Cualquier acción resuelta consume el prefijo; el tick y el resize no.
+    if !matches!(action, Action::Tick | Action::Resize | Action::PrefixStart) {
+        state.prefix_pending = false;
+    }
     match action {
         Action::Quit => {
             state.should_quit = true;
@@ -32,6 +36,18 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
             Modal::Help => state.modal = Modal::None,
             _ => {}
         },
+        Action::PrefixStart => state.prefix_pending = true,
+        Action::PrefixCancel => {}
+        Action::PrefixLiteral => {
+            // La app real enviará NUL al PTY del panel con foco.
+            state.push_toast("DEMO: se enviaría Ctrl+Space al panel", ToastLevel::Info);
+        }
+        Action::PrefixUnknown(name) => {
+            state.push_toast(
+                format!("Atajo desconocido: Ctrl+Space {name}"),
+                ToastLevel::Warning,
+            );
+        }
         Action::DemoSetStatus(status) => set_status(state, status),
         Action::Key(key) => handle_key(state, key),
         // El resto de acciones de navegación no actúan con un diálogo abierto.
@@ -935,5 +951,153 @@ mod tests {
         assert_eq!(s.active, 0);
         update(&mut s, Action::Help);
         assert_eq!(s.modal, Modal::None);
+    }
+
+    /// Pasa una tecla por `map_key` y `update`, como el bucle de eventos.
+    fn send(state: &mut AppState, key: KeyEvent) -> Vec<Effect> {
+        let action = crate::keymap::map_key(state, key);
+        update(state, action)
+    }
+
+    fn ctrl_space() -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(' '), KeyModifiers::CONTROL)
+    }
+
+    fn plain(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn prefix_then_q_quits() {
+        let mut s = demo_state();
+        assert!(send(&mut s, ctrl_space()).is_empty());
+        assert!(s.prefix_pending);
+        assert_eq!(send(&mut s, plain('q')), vec![Effect::Quit]);
+        assert!(s.should_quit);
+        assert!(!s.prefix_pending);
+    }
+
+    #[test]
+    fn prefix_then_digit_selects_task() {
+        let mut s = demo_state();
+        send(&mut s, ctrl_space());
+        send(&mut s, plain('2'));
+        assert_eq!(s.active, 1);
+        assert!(!s.prefix_pending);
+    }
+
+    #[test]
+    fn prefix_esc_cancels_without_action() {
+        let mut s = demo_state();
+        let before = s.clone();
+        send(&mut s, ctrl_space());
+        send(&mut s, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(s, before);
+    }
+
+    #[test]
+    fn prefix_twice_is_literal_with_info_toast() {
+        let mut s = demo_state();
+        send(&mut s, ctrl_space());
+        send(&mut s, ctrl_space());
+        assert!(!s.prefix_pending);
+        let t = s.toasts.last().expect("aviso");
+        assert_eq!(t.text, "DEMO: se enviaría Ctrl+Space al panel");
+        assert_eq!(t.level, ToastLevel::Info);
+    }
+
+    #[test]
+    fn prefix_unknown_warns_and_cancels() {
+        let mut s = demo_state();
+        send(&mut s, ctrl_space());
+        send(&mut s, plain('x'));
+        assert!(!s.prefix_pending);
+        let t = s.toasts.last().expect("aviso");
+        assert_eq!(t.text, "Atajo desconocido: Ctrl+Space x");
+        assert_eq!(t.level, ToastLevel::Warning);
+    }
+
+    #[test]
+    fn nul_variant_is_a_prefix() {
+        let mut s = demo_state();
+        send(
+            &mut s,
+            KeyEvent::new(KeyCode::Char('@'), KeyModifiers::CONTROL),
+        );
+        assert!(s.prefix_pending);
+    }
+
+    #[test]
+    fn tick_keeps_the_prefix_pending() {
+        let mut s = demo_state();
+        send(&mut s, ctrl_space());
+        update(&mut s, Action::Tick);
+        update(&mut s, Action::Resize);
+        assert!(s.prefix_pending);
+    }
+
+    #[test]
+    fn prefix_q_quits_from_any_pane_and_modal() {
+        let modals = [
+            Modal::None,
+            Modal::Help,
+            Modal::NewTask {
+                name: String::new(),
+                agent_idx: 0,
+                base: "main".to_string(),
+                field: 0,
+            },
+            Modal::Confirm {
+                message: "¿?".to_string(),
+                action: ConfirmAction::DiscardTask(0),
+            },
+            Modal::Review {
+                files: fake_changes(),
+                selected: 0,
+            },
+        ];
+        for modal in modals {
+            for focus in [Pane::Explorer, Pane::Editor, Pane::Agent, Pane::Terminal] {
+                let mut s = demo_state();
+                s.modal = modal.clone();
+                s.focus = focus;
+                send(&mut s, ctrl_space());
+                assert_eq!(send(&mut s, plain('q')), vec![Effect::Quit], "{modal:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn plain_q_in_chat_input_is_text() {
+        let mut s = demo_state();
+        s.focus = Pane::Agent;
+        let before = s.active_task().expect("tarea").input.clone();
+        assert!(send(&mut s, plain('q')).is_empty());
+        assert_eq!(s.active_task().expect("tarea").input, format!("{before}q"));
+    }
+
+    #[test]
+    fn alt_shortcuts_still_work() {
+        let mut s = demo_state();
+        let alt = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT);
+        send(&mut s, alt('2'));
+        assert_eq!(s.active, 1);
+        assert_eq!(send(&mut s, alt('q')), vec![Effect::Quit]);
+    }
+
+    #[test]
+    fn shortcut_label_per_style() {
+        use crate::state::{shortcut_label, ShortcutStyle};
+        assert_eq!(shortcut_label(ShortcutStyle::Prefix, "d"), "Ctrl+Space d");
+        assert_eq!(shortcut_label(ShortcutStyle::Alt, "d"), "Alt+d");
+        assert_eq!(
+            ShortcutStyle::from_env_value("PREFIX"),
+            Some(ShortcutStyle::Prefix)
+        );
+        assert_eq!(
+            ShortcutStyle::from_env_value("alt"),
+            Some(ShortcutStyle::Alt)
+        );
+        assert_eq!(ShortcutStyle::from_env_value("x"), None);
     }
 }

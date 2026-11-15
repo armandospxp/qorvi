@@ -5,24 +5,85 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::action::Action;
 use crate::state::{AgentStatus, AppState};
 
-pub fn map_key(_state: &AppState, key: KeyEvent) -> Action {
-    if key.modifiers == KeyModifiers::ALT {
+/// ¿Es la tecla prefijo? Fijada a `Ctrl+Space` en la demo; algunos terminales envían
+/// NUL, que crossterm da como `Ctrl+@` o `Ctrl+2`. Toda la comparación vive aquí para
+/// poder cambiarla cuando el prefijo salga de la configuración.
+fn is_prefix(key: &KeyEvent) -> bool {
+    key.modifiers == KeyModifiers::CONTROL && matches!(key.code, KeyCode::Char(' ' | '@' | '2'))
+}
+
+/// Tecla de un atajo global (la misma con `Alt+` y tras el prefijo).
+fn shortcut(c: char) -> Option<Action> {
+    Some(match c {
+        'h' => Action::FocusLeft,
+        'j' => Action::FocusDown,
+        'k' => Action::FocusUp,
+        'l' => Action::FocusRight,
+        '1'..='9' => Action::SelectTask(c as usize - '1' as usize),
+        'n' => Action::NewTask,
+        'd' => Action::OpenReview,
+        'z' => Action::ToggleZoom,
+        't' => Action::ToggleTerminal,
+        'e' => Action::ToggleExplorer,
+        'm' => Action::ShowLastToast,
+        'q' => Action::Quit,
+        '?' => Action::Help,
+        _ => return None,
+    })
+}
+
+/// Nombre legible de una tecla para el aviso de atajo desconocido.
+fn key_name(key: &KeyEvent) -> String {
+    let base = match key.code {
+        KeyCode::Char(c) => c.to_string(),
+        KeyCode::F(n) => format!("F{n}"),
+        KeyCode::Enter => "Enter".to_string(),
+        KeyCode::Tab | KeyCode::BackTab => "Tab".to_string(),
+        KeyCode::Backspace => "Backspace".to_string(),
+        KeyCode::Delete => "Delete".to_string(),
+        KeyCode::Up => "↑".to_string(),
+        KeyCode::Down => "↓".to_string(),
+        KeyCode::Left => "←".to_string(),
+        KeyCode::Right => "→".to_string(),
+        other => format!("{other:?}"),
+    };
+    let mut name = String::new();
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        name.push_str("Ctrl+");
+    }
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        name.push_str("Alt+");
+    }
+    name + &base
+}
+
+pub fn map_key(state: &AppState, key: KeyEvent) -> Action {
+    if state.prefix_pending {
+        // Todo lo que llega con el prefijo pendiente lo resuelve (o lo cancela).
+        if is_prefix(&key) {
+            return Action::PrefixLiteral;
+        }
+        if key.code == KeyCode::Esc {
+            return Action::PrefixCancel;
+        }
         if let KeyCode::Char(c) = key.code {
-            match c {
-                'h' => return Action::FocusLeft,
-                'j' => return Action::FocusDown,
-                'k' => return Action::FocusUp,
-                'l' => return Action::FocusRight,
-                '1'..='9' => return Action::SelectTask(c as usize - '1' as usize),
-                'n' => return Action::NewTask,
-                'd' => return Action::OpenReview,
-                'z' => return Action::ToggleZoom,
-                't' => return Action::ToggleTerminal,
-                'e' => return Action::ToggleExplorer,
-                'm' => return Action::ShowLastToast,
-                'q' => return Action::Quit,
-                _ => {}
+            if (key.modifiers - KeyModifiers::SHIFT).is_empty() {
+                if let Some(action) = shortcut(c) {
+                    return action;
+                }
             }
+        }
+        return Action::PrefixUnknown(key_name(&key));
+    }
+    if is_prefix(&key) {
+        return Action::PrefixStart;
+    }
+    if (key.modifiers - KeyModifiers::SHIFT) == KeyModifiers::ALT {
+        if let Some(action) = match key.code {
+            KeyCode::Char(c) => shortcut(c),
+            _ => None,
+        } {
+            return action;
         }
     }
     if key.modifiers == KeyModifiers::NONE {
@@ -100,5 +161,84 @@ mod tests {
             map_key(&s, key(KeyCode::F(1), KeyModifiers::NONE)),
             Action::Help
         );
+    }
+
+    fn ctrl_space() -> KeyEvent {
+        key(KeyCode::Char(' '), KeyModifiers::CONTROL)
+    }
+
+    fn pending() -> AppState {
+        let mut s = demo_state();
+        s.prefix_pending = true;
+        s
+    }
+
+    fn plain(c: char) -> KeyEvent {
+        key(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn prefix_variants_start_the_prefix() {
+        let s = demo_state();
+        for code in [' ', '@', '2'] {
+            let k = key(KeyCode::Char(code), KeyModifiers::CONTROL);
+            assert_eq!(map_key(&s, k), Action::PrefixStart, "{code:?}");
+        }
+        // Sin Ctrl no es prefijo.
+        assert_eq!(map_key(&s, plain(' ')), Action::Key(plain(' ')));
+    }
+
+    #[test]
+    fn prefix_then_table_key() {
+        let s = pending();
+        assert_eq!(map_key(&s, plain('q')), Action::Quit);
+        assert_eq!(map_key(&s, plain('2')), Action::SelectTask(1));
+        assert_eq!(map_key(&s, plain('h')), Action::FocusLeft);
+        assert_eq!(map_key(&s, plain('?')), Action::Help);
+        assert_eq!(
+            map_key(&s, key(KeyCode::Char('?'), KeyModifiers::SHIFT)),
+            Action::Help
+        );
+    }
+
+    #[test]
+    fn prefix_esc_twice_and_unknown() {
+        let s = pending();
+        assert_eq!(
+            map_key(&s, key(KeyCode::Esc, KeyModifiers::NONE)),
+            Action::PrefixCancel
+        );
+        assert_eq!(map_key(&s, ctrl_space()), Action::PrefixLiteral);
+        assert_eq!(
+            map_key(&s, key(KeyCode::Char('@'), KeyModifiers::CONTROL)),
+            Action::PrefixLiteral
+        );
+        assert_eq!(map_key(&s, plain('x')), Action::PrefixUnknown("x".into()));
+        // `r` no es global: el explorador la usa para refrescar.
+        assert_eq!(map_key(&s, plain('r')), Action::PrefixUnknown("r".into()));
+        assert_eq!(
+            map_key(&s, key(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::PrefixUnknown("Enter".into())
+        );
+    }
+
+    #[test]
+    fn alt_shortcuts_work_while_prefix_is_pending_too_but_never_leak_keys() {
+        let s = pending();
+        // Con el prefijo pendiente solo cuenta la tabla: Alt+q es una tecla desconocida.
+        assert_eq!(
+            map_key(&s, key(KeyCode::Char('q'), KeyModifiers::ALT)),
+            Action::PrefixUnknown("Alt+q".into())
+        );
+    }
+
+    #[test]
+    fn alt_help_and_text_keys() {
+        let s = demo_state();
+        assert_eq!(
+            map_key(&s, key(KeyCode::Char('?'), KeyModifiers::ALT)),
+            Action::Help
+        );
+        assert_eq!(map_key(&s, plain('?')), Action::Key(plain('?')));
     }
 }

@@ -1,5 +1,5 @@
 use qorvi_tui::demo::{demo_state, fake_changes};
-use qorvi_tui::state::{AppState, ConfirmAction, Modal, Pane, Toast, ToastLevel};
+use qorvi_tui::state::{AppState, ConfirmAction, Modal, Pane, ShortcutStyle, Toast, ToastLevel};
 use qorvi_tui::view::view;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
@@ -9,6 +9,9 @@ use ratatui::Terminal;
 fn state() -> AppState {
     let mut s = demo_state();
     s.ascii = false;
+    // Fijo: el resultado no puede depender del sistema operativo ni de QORVI_KEYS.
+    s.shortcut_style = ShortcutStyle::Alt;
+    s.prefix_pending = false;
     s
 }
 
@@ -155,6 +158,22 @@ fn permission_task_with_toast_120x35() {
 }
 
 #[test]
+fn prefix_pending_120x35() {
+    let mut s = state();
+    s.shortcut_style = ShortcutStyle::Prefix;
+    s.prefix_pending = true;
+    insta::assert_snapshot!(snap(&s, 120, 35));
+}
+
+#[test]
+fn help_prefix_style_120x35() {
+    let mut s = state();
+    s.shortcut_style = ShortcutStyle::Prefix;
+    s.modal = Modal::Help;
+    insta::assert_snapshot!(snap(&s, 120, 35));
+}
+
+#[test]
 fn render_never_panics() {
     let modals = [
         Modal::None,
@@ -198,6 +217,12 @@ fn render_never_panics() {
                 {
                     let mut s = state();
                     s.explorer_toggled = explorer_toggled;
+                    s.prefix_pending = true;
+                    s.shortcut_style = if zoom {
+                        ShortcutStyle::Prefix
+                    } else {
+                        ShortcutStyle::Alt
+                    };
                     s.tasks[0].explorer.expanded.extend(
                         ["src", "src/util", ".github", ".github/workflows", "tests"]
                             .map(String::from),
