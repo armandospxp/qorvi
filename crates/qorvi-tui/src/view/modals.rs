@@ -7,19 +7,25 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use super::{bold, centered, fg, tail, text_width, truncate, wrap};
-use crate::state::{AppState, Modal};
+use crate::state::{shortcut_label, AppState, Modal};
 use crate::theme::{color, Token};
 
-const HELP: [(&str, &str); 17] = [
-    ("Alt+h/j/k/l", "mover el foco entre paneles"),
-    ("Alt+1..9", "ir a la tarea N"),
-    ("Alt+n", "nueva tarea"),
-    ("Alt+d", "review / diff"),
-    ("Alt+z", "zoom del panel"),
-    ("Alt+t", "mostrar/ocultar la terminal"),
-    ("Alt+e", "mostrar/ocultar el explorador de archivos"),
-    ("Alt+m", "ver de nuevo el último aviso"),
-    ("Alt+q", "salir"),
+/// Atajos globales: tecla (la misma con `Alt+` o tras `Ctrl+Space`) y descripción.
+const HELP_GLOBAL: [(&str, &str); 10] = [
+    ("h/j/k/l", "mover el foco entre paneles"),
+    ("1..9", "ir a la tarea N"),
+    ("n", "nueva tarea"),
+    ("d", "review / diff"),
+    ("z", "zoom del panel"),
+    ("t", "mostrar/ocultar la terminal"),
+    ("e", "mostrar/ocultar el explorador de archivos"),
+    ("m", "ver de nuevo el último aviso"),
+    ("q", "salir"),
+    ("?", "esta ayuda"),
+];
+
+/// Teclas que no dependen de la forma de atajo.
+const HELP_FIXED: [(&str, &str); 8] = [
     ("F1", "esta ayuda"),
     ("F5..F8", "DEMO: trabajando/permiso/listo/error"),
     ("Enter", "enviar mensaje o confirmar permiso"),
@@ -54,7 +60,7 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect) {
             field,
         } => new_task(state, frame, area, name, *agent_idx, base, *field),
         Modal::Confirm { message, .. } => confirm(frame, area, message),
-        Modal::Help => help(frame, area),
+        Modal::Help => help(state, frame, area),
     }
 }
 
@@ -159,8 +165,14 @@ fn confirm(frame: &mut Frame, area: Rect, message: &str) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-fn help(frame: &mut Frame, area: Rect) {
-    let rect = centered(area, 64, HELP.len() as u16 + 4);
+fn help(state: &AppState, frame: &mut Frame, area: Rect) {
+    let style = state.shortcut_style;
+    let rows: Vec<(String, &str)> = HELP_GLOBAL
+        .iter()
+        .map(|(k, d)| (shortcut_label(style, k), *d))
+        .chain(HELP_FIXED.iter().map(|(k, d)| (k.to_string(), *d)))
+        .collect();
+    let rect = centered(area, 68, rows.len() as u16 + 6);
     if rect.width < 4 || rect.height < 3 {
         return;
     }
@@ -169,9 +181,14 @@ fn help(frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     let w = usize::from(inner.width);
-    let mut lines: Vec<Line> = vec![Line::raw("")];
-    lines.extend(HELP.iter().map(|(k, d)| {
-        let key = format!(" {k:<12}");
+    let key_w = rows.iter().map(|(k, _)| text_width(k)).max().unwrap_or(0) + 2;
+    let also = shortcut_label(style.other(), "<tecla>");
+    let mut lines: Vec<Line> = vec![
+        Line::styled(truncate(&format!(" También: {also}"), w), fg(Token::Muted)),
+        Line::raw(""),
+    ];
+    lines.extend(rows.iter().map(|(k, d)| {
+        let key = format!(" {k:<width$}", width = key_w - 1);
         let rest = w.saturating_sub(text_width(&key));
         Line::from(vec![
             Span::styled(key, bold(Token::Accent)),

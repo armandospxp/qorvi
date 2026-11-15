@@ -25,4 +25,4 @@ expression: "snap(&s, 80, 24)"
 ││Escribe un mensaje…                                                         ││
 │└────────────────────────────────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────────────────────────────┘
- DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: F1
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: Alt+?

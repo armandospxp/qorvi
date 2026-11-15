@@ -214,6 +214,50 @@ pub struct Toast {
 /// Ticks (250 ms) que vive un toast: unos 5 segundos.
 pub const TOAST_TTL_TICKS: u16 = 20;
 
+/// Forma de lanzar atajos que muestran la ayuda y las pistas. Las dos funcionan siempre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortcutStyle {
+    /// `Ctrl+Space` y después la tecla.
+    Prefix,
+    /// `Alt+tecla`.
+    Alt,
+}
+
+impl ShortcutStyle {
+    /// Por defecto, prefijo en macOS (Option no llega como Alt) y Alt en el resto.
+    pub fn os_default() -> Self {
+        if cfg!(target_os = "macos") {
+            ShortcutStyle::Prefix
+        } else {
+            ShortcutStyle::Alt
+        }
+    }
+
+    /// Interpreta `QORVI_KEYS` (`prefix` o `alt`); cualquier otro valor no cuenta.
+    pub fn from_env_value(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "prefix" => Some(ShortcutStyle::Prefix),
+            "alt" => Some(ShortcutStyle::Alt),
+            _ => None,
+        }
+    }
+
+    pub fn other(self) -> Self {
+        match self {
+            ShortcutStyle::Prefix => ShortcutStyle::Alt,
+            ShortcutStyle::Alt => ShortcutStyle::Prefix,
+        }
+    }
+}
+
+/// Texto de un atajo según la forma por defecto: `Ctrl+Space d` o `Alt+d`.
+pub fn shortcut_label(style: ShortcutStyle, key: &str) -> String {
+    match style {
+        ShortcutStyle::Prefix => format!("Ctrl+Space {key}"),
+        ShortcutStyle::Alt => format!("Alt+{key}"),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppState {
     pub tasks: Vec<Task>,
@@ -230,6 +274,10 @@ pub struct AppState {
     pub demo: bool,
     pub should_quit: bool,
     pub ascii: bool,
+    /// Qué forma de atajo muestran la ayuda y las pistas.
+    pub shortcut_style: ShortcutStyle,
+    /// Se pulsó `Ctrl+Space` y falta la tecla del atajo.
+    pub prefix_pending: bool,
     /// Lo fija el bucle de eventos según el tamaño de la terminal; `update` lo
     /// necesita para saber si Alt+h/l recorren paneles (layout compacto).
     pub compact: bool,

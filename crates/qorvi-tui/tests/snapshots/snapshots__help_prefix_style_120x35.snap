@@ -1,0 +1,39 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 120, 35)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ Archivos ────────────┐┌ nvim · src/main.rs ───────────────────────────────┐┌ Agente · claude · ● trabajando ─────────┐
+│ ▸ .github/           ││  1 use std::io;                                   ││› Mejora la validación del nombre de     │
+│ ▾ src/ •             ││  2                                                ││  tarea en src/lib.rs                    │
+│   ▸ util/            ││  3 mod config;                                    ││                                         │
+│     config.rs        ││ ┌ Ayuda · atajos (Esc cierra) ─────────────────────────────────────┐módulo actual y después  │
+│›  M lib.rs           ││ │ También: Alt+<tecla>                                             │io con errores           │
+│     main.rs          ││ │                                                                  │                         │
+│   A session.rs       ││ │ Ctrl+Space h/j/k/l mover el foco entre paneles                   │                         │
+│ ▸ tests/             ││ │ Ctrl+Space 1..9    ir a la tarea N                               │rs (read) ✓ completado   │
+│   .gitignore         ││ │ Ctrl+Space n       nueva tarea                                   │                         │
+│   Cargo.toml         ││ │ Ctrl+Space d       review / diff                                 │.rs (edit) ● en curso    │
+│   README.md          ││ │ Ctrl+Space z       zoom del panel                                │ estado: en curso        │
+│ ? notas.txt          ││ │ Ctrl+Space t       mostrar/ocultar la terminal                   │                         │
+│                      ││ │ Ctrl+Space e       mostrar/ocultar el explorador de archivos     │                         │
+│                      ││ │ Ctrl+Space m       ver de nuevo el último aviso                  │                         │
+│                      ││ │ Ctrl+Space q       salir                                         │                         │
+│                      ││ │ Ctrl+Space ?       esta ayuda                                    │                         │
+│                      ││ │ F1                 esta ayuda                                    │                         │
+│                      ││ │ F5..F8             DEMO: trabajando/permiso/listo/error          │                         │
+│                      ││ │ Enter              enviar mensaje o confirmar permiso            │                         │
+│                      ││ │ Alt+Enter          salto de línea en el mensaje                  │r envía · Alt+Enter sal…┐│
+│                      ││~│ Esc                cancelar el turno / cerrar diálogo            │aje…                    ││
+│                      ││~│ ↑/↓                elegir opción de un permiso                   │────────────────────────┘│
+└──────────────────────┘└─│ j/k ↑/↓            explorador: mover la selección                │─────────────────────────┘
+┌ zsh ────────────────────│ Enter/l h r        explorador: abrir · contraer/subir · refrescar│─────────────────────────┐
+│test config::tests::loads│                                                                  │                         │
+│test config::tests::rejec│                                                                  │                         │
+│test session::tests::vali└──────────────────────────────────────────────────────────────────┘                         │
+│test session::tests::resumes_task ... ok                                                                              │
+│                                                                                                                      │
+│test result: ok. 4 passed; 0 failed; 0 ignored                                                                        │
+│$                                                                                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: Ctrl+Space ?

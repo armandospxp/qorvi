@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 use super::{chat, explorer, fg, truncate};
-use crate::state::{AppState, Pane};
+use crate::state::{shortcut_label, AppState, Pane};
 use crate::theme::{color, status_label, status_symbol, Token};
 
 pub fn pane_block(title: &str, focused: bool, width: u16) -> Block<'static> {
@@ -108,7 +108,10 @@ pub fn render_minimized_terminal(state: &AppState, frame: &mut Frame, area: Rect
         fg(Token::Muted)
     };
     let text = truncate(
-        " ▸ Terminal (minimizada) · Alt+t para desplegar",
+        &format!(
+            " ▸ Terminal (minimizada) · {} para desplegar",
+            shortcut_label(state.shortcut_style, "t")
+        ),
         usize::from(area.width),
     );
     frame.render_widget(Paragraph::new(Line::styled(text, style)), area);

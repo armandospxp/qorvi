@@ -7,7 +7,7 @@ use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 use super::{fg, text_width, truncate};
-use crate::state::AppState;
+use crate::state::{shortcut_label, AppState};
 use crate::theme::{color, status_label, status_symbol, status_token, Token};
 
 struct Segment {
@@ -40,6 +40,17 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, small: bool) {
         demo_style,
         0,
     ));
+    if state.prefix_pending {
+        // Resaltado con acento (no aviso): es un estado esperado, sin timeout.
+        segs.push(seg(
+            " Ctrl+Space… ",
+            Style::default()
+                .fg(color(Token::Background))
+                .bg(color(Token::Accent))
+                .add_modifier(Modifier::BOLD),
+            0,
+        ));
+    }
     if small {
         segs.push(seg("terminal pequeña", fg(Token::Warning), 2));
     }
@@ -65,7 +76,11 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, small: bool) {
         }
         None => segs.push(seg("sin tareas", fg(Token::Muted), 1)),
     }
-    segs.push(seg("ayuda: F1", fg(Token::Muted), 7));
+    segs.push(seg(
+        format!("ayuda: {}", shortcut_label(state.shortcut_style, "?")),
+        fg(Token::Muted),
+        7,
+    ));
 
     let sep_w = 3;
     let total = |s: &[Segment]| {
