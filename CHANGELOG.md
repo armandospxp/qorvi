@@ -11,3 +11,4 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Spike de PTY (portable-pty + vt100 + tui-term) con respuesta a consultas de terminal.
 - Spike de ACP: cliente con SDK 5.3 sobre `ByteStreams`, contención de rutas `fs/*` y agente fixture.
 - Mockup navegable de la TUI con datos falsos (`qorvi --demo`), con explorador de archivos.
+- Atajos con tecla prefijo `Ctrl+Space` + tecla (por defecto en macOS) además de `Alt+tecla` (por defecto en Windows/Linux); `Ctrl+Space q` sale siempre.

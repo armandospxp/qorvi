@@ -21,7 +21,7 @@ _Última actualización: 2026-11-15_
 - [x] TUI navegable con datos falsos: tareas, chat, permisos, review, diálogos, avisos · Sonnet
 - [x] Layout según el tamaño de la terminal y snapshots a 70×20, 90×28, 120×35 y 140×40 · Sonnet
 - [x] Explorador de archivos con marcas de cambios · Sonnet
-- [ ] Atajos con tecla prefijo `Ctrl+Space` (por defecto en macOS) además de `Alt` · Sonnet
+- [x] Atajos con tecla prefijo `Ctrl+Space` (por defecto en macOS) además de `Alt` · Sonnet
 
 ## Fase 1: núcleo (`qorvi-core`) y CLI
 
