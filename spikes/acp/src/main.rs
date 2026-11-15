@@ -59,7 +59,8 @@ async fn main() -> Result<()> {
     while let Some(a) = args.first().cloned() {
         match a.as_str() {
             "--cwd" => {
-                cwd = PathBuf::from(args.get(1).context("falta DIR")?);
+                let dir = args.get(1).filter(|d| !d.is_empty() && *d != "--");
+                cwd = PathBuf::from(dir.context("--cwd necesita una carpeta (¿variable vacía?)")?);
                 args.drain(..2);
             }
             "--load" => {
@@ -74,7 +75,8 @@ async fn main() -> Result<()> {
         }
     }
     let (program, prog_args) = args.split_first().context("falta el comando del agente")?;
-    let cwd = std::fs::canonicalize(&cwd)?;
+    let cwd = std::fs::canonicalize(&cwd)
+        .with_context(|| format!("la carpeta de --cwd no existe: {}", cwd.display()))?;
 
     // Lanzamos el proceso nosotros (AcpAgent no permite fijar cwd).
     let mut child = Command::new(program)
