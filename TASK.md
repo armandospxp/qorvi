@@ -22,6 +22,9 @@ _Última actualización: 2026-11-15_
 - [x] Layout según el tamaño de la terminal y snapshots a 70×20, 90×28, 120×35 y 140×40 · Sonnet
 - [x] Explorador de archivos con marcas de cambios · Sonnet
 - [x] Atajos con tecla prefijo `Ctrl+Space` (por defecto en macOS) además de `Alt` · Sonnet
+- [~] Ratón: clic para enfocar paneles, tareas, explorador y permisos; rueda para desplazar · Sonnet
+- [ ] Atajos directos `Cmd` (macOS) / `Ctrl` (Windows/Linux) con detección automática de la terminal · Sonnet
+- [ ] Probar atajos en Ghostty, iTerm2, Terminal.app, VS Code, Windows Terminal y GNOME Terminal · Usuario
 
 ## Fase 1: núcleo (`qorvi-core`) y CLI
 
