@@ -1,0 +1,9 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&state(), 30, 8)"
+---
+
+
+
+  Terminal demasiado pequeña
+         (mín. 40×10)

@@ -1,0 +1,44 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&state(), 140, 40)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ nvim · src/main.rs ───────────────────────────────────────────────────────┐┌ Agente · claude · ● trabajando ─────────────────────────────┐
+│  1 use std::io;                                                           ││› Mejora la validación del nombre de tarea en src/lib.rs     │
+│  2                                                                        ││                                                             │
+│  3 mod config;                                                            ││  Voy a leer el módulo actual y después aplico el cambio con │
+│  4 mod session;                                                           ││  errores descriptivos.                                      │
+│  5                                                                        ││                                                             │
+│  6 /// Valida el nombre de una tarea nueva.                               ││▸ Leer src/main.rs (read) ✓ completado                       │
+│  7 pub fn validate_name(name: &str) -> Result<(), String> {               ││                                                             │
+│  8     if name.is_empty() {                                               ││▾ Editar src/lib.rs (edit) ● en curso                        │
+│  9         return Err("nombre vacío".to_string());                        ││    tipo: edit · estado: en curso                            │
+│ 10     }                                                                  ││                                                             │
+│ 11     if name.contains('/') || name.contains(' ') {                      ││                                                             │
+│ 12         return Err("carácter no permitido".to_string());               ││                                                             │
+│ 13     }                                                                  ││                                                             │
+│ 14     Ok(())                                                             ││                                                             │
+│ 15 }                                                                      ││                                                             │
+│ 16                                                                        ││                                                             │
+│ 17 fn main() -> io::Result<()> {                                          ││                                                             │
+│ 18     let cfg = config::load()?;                                         ││                                                             │
+│ 19     session::run(cfg)                                                  ││                                                             │
+│ 20 }                                                                      ││                                                             │
+│~                                                                          ││                                                             │
+│~                                                                          ││                                                             │
+│~                                                                          ││┌ Mensaje · Enter envía · Alt+Enter salto ──────────────────┐│
+│~                                                                          │││Escribe un mensaje…                                        ││
+│~                                                                          ││└───────────────────────────────────────────────────────────┘│
+└───────────────────────────────────────────────────────────────────────────┘└─────────────────────────────────────────────────────────────┘
+┌ zsh ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                                                                          │
+│running 4 tests                                                                                                                           │
+│test config::tests::loads_defaults ... ok                                                                                                 │
+│test config::tests::rejects_unknown_agent ... ok                                                                                          │
+│test session::tests::validates_names ... ok                                                                                               │
+│test session::tests::resumes_task ... ok                                                                                                  │
+│                                                                                                                                          │
+│test result: ok. 4 passed; 0 failed; 0 ignored                                                                                            │
+│$                                                                                                                                         │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ DEMO  │ APP-12 │ qorvi/APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: F1

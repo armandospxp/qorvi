@@ -1,0 +1,39 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 120, 35)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ nvim · src/main.rs ────────────────────────────────────────────┐┌ Agente · codex · ⏳ permiso ───────────────────────┐
+│  1 use std::io;                                                ││› Corrige el test que falla en config               │
+│  2                                                             ││                                                    │
+│  3 mod config;                                                 ││  Necesito ejecutar los tests para reproducir el    │
+│  4 mod session;                                                ││  fallo.                                            │
+│  5                                                             ││                                                    │
+│  6 /// Valida el nombre de una tarea nueva.                    ││⏳ Permiso: Ejecutar: cargo test                    │
+│  7 pub fn validate_name(name: &str) -> Result<(), String> {    ││› (•) Permitir una vez                              │
+│  8     if name.is_empty() {                                    ││  ( ) Permitir siempre                              │
+│  9         return Err("nombre vacío".to_string());             ││  ( ) Rechazar                                      │
+│ 10     }                                                       ││  ↑/↓ elegir · Enter confirmar                      │
+│ 11     if name.contains('/') || name.contains(' ') {           ││                                                    │
+│ 12         return Err("carácter no permitido".to_string());    ││                                                    │
+│ 13     }                                                       ││                                                    │
+│ 14     Ok(())                                                  ││                                                    │
+│ 15 }                                                           ││                                                    │
+│ 16                                                             ││                                                    │
+│ 17 fn main() -> io::Result<()> {                               ││                                                    │
+│ 18     let cfg = config::load()?;                              ││                                                    │
+│ 19     session::run(cfg)                                       ││                                                    │
+│ 20 }                                                           ││┌ Mensaje · Enter envía · Alt+Enter salto ─────────┐│
+│~                                                               │││Escribe un mensaje…                               ││
+│~                                                               ││└──────────────────────────────────────────────────┘│
+└────────────────────────────────────────────────────────────────┘└────────────────────────────────────────────────────┘
+┌ zsh ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│test config::tests::loads_defaults ... ok                                                                             │
+│test config::tests::rejects_unknown_agent ... ok                                                                      │
+│test session::tests::validates_names ... ok                                                                           │
+│test session::tests::resumes_task ... ok                                                                              │
+│                                                                                                                      │
+│test result: ok. 4 passed; 0 failed; 0 ignored                           ┌────────────────────────────────────────────┐
+│$                                                                        │[aviso] Tarea APP-13 esperando permiso      │
+└─────────────────────────────────────────────────────────────────────────└────────────────────────────────────────────┘
+ DEMO  │ APP-13 │ qorvi/APP-13 │ ⏳ permiso │ foco: Agente │ $0.18 │ ayuda: F1

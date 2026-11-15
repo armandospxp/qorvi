@@ -5,3 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+crossterm = "0.29"
+ratatui = "0.30"
+
+[dev-dependencies]
+insta = "1.49.0"
