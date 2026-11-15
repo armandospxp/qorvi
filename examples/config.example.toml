@@ -1,0 +1,22 @@
+# Config de ejemplo de qorvi.
+# Global: ~/.config/qorvi/config.toml (Linux), ~/Library/Application Support/qorvi/config.toml (macOS),
+#         %APPDATA%\qorvi\config\config.toml (Windows).
+# Por repositorio: .qorvi.toml en la raíz del repo (tiene prioridad sobre la global).
+
+default_agent = "mi-agente"
+
+# editor = "nvim"                       # por defecto: $VISUAL, $EDITOR
+# shell = "zsh"                         # por defecto: $SHELL (Windows: pwsh → powershell → cmd)
+copy_files = [".env", ".env.local"]     # se copian al worktree de cada tarea nueva
+# setup = "npm install"                 # se ejecuta en la terminal de cada tarea nueva
+
+# Cada agente es un ejecutable que habla ACP por stdio.
+# Se lanza como lista de argumentos, nunca a través de una shell.
+# Los comandos reales de Claude Code y Codex se añadirán aquí tras el spike de ACP.
+[agents.mi-agente]
+command = "mi-agente-acp"
+args = []
+env = {}
+
+[keys]
+# focus_left = "alt-h"
