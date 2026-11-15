@@ -1,6 +1,7 @@
 //! Vista: pura, nunca muta el estado.
 
 pub mod chat;
+pub mod explorer;
 pub mod modals;
 pub mod panes;
 pub mod review;
@@ -24,7 +25,7 @@ pub const MIN_ROWS: u16 = 10;
 pub enum Tier {
     TooSmall,
     Compact,
-    /// 90–119 columnas: terminal minimizada por defecto.
+    /// 90–119 columnas: terminal minimizada y explorador oculto por defecto.
     Medium,
     Full,
 }
@@ -228,8 +229,22 @@ fn render_body(state: &AppState, frame: &mut Frame, body: Rect, tier: Tier) {
     let term_h = term_h.min(body.height.saturating_sub(4)).max(1);
     let [top, term] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(term_h)]).areas(body);
+    // Como la terminal: el valor por defecto depende del tier y Alt+e lo invierte.
+    let show_explorer = (tier == Tier::Full) ^ state.explorer_toggled;
+    let (explorer, rest) = if show_explorer {
+        // 20 % del ancho, entre 20 y 32 columnas (sin pasar de la mitad).
+        let w = (top.width / 5).clamp(20, 32).min(top.width / 2);
+        let [explorer, rest] =
+            Layout::horizontal([Constraint::Length(w), Constraint::Min(0)]).areas(top);
+        (Some(explorer), rest)
+    } else {
+        (None, top)
+    };
     let [editor, agent] =
-        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(top);
+        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(rest);
+    if let Some(explorer) = explorer {
+        panes::render_pane(state, frame, explorer, Pane::Explorer);
+    }
     panes::render_pane(state, frame, editor, Pane::Editor);
     panes::render_pane(state, frame, agent, Pane::Agent);
     if minimized {

@@ -1,0 +1,28 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 80, 24)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+  Archivos  |  Editor  |  Agente  |  Terminal    ● trabajando
+┌ Archivos ────────────────────────────────────────────────────────────────────┐
+│ ▸ .github/                                                                   │
+│ ▾ src/ •                                                                     │
+│   ▸ util/                                                                    │
+│     config.rs                                                                │
+│›  M lib.rs                                                                   │
+│     main.rs                                                                  │
+│   A session.rs                                                               │
+│ ▸ tests/                                                                     │
+│   .gitignore                                                                 │
+│   Cargo.toml                                                                 │
+│   README.md                                                                  │
+│ ? notas.txt                                                                  │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: F1

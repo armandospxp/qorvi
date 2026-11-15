@@ -3,30 +3,30 @@ source: crates/qorvi-tui/tests/snapshots.rs
 expression: "snap(&state(), 120, 35)"
 ---
  [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
-┌ nvim · src/main.rs ────────────────────────────────────────────┐┌ Agente · claude · ● trabajando ────────────────────┐
-│  1 use std::io;                                                ││› Mejora la validación del nombre de tarea en       │
-│  2                                                             ││  src/lib.rs                                        │
-│  3 mod config;                                                 ││                                                    │
-│  4 mod session;                                                ││  Voy a leer el módulo actual y después aplico el   │
-│  5                                                             ││  cambio con errores descriptivos.                  │
-│  6 /// Valida el nombre de una tarea nueva.                    ││                                                    │
-│  7 pub fn validate_name(name: &str) -> Result<(), String> {    ││▸ Leer src/main.rs (read) ✓ completado              │
-│  8     if name.is_empty() {                                    ││                                                    │
-│  9         return Err("nombre vacío".to_string());             ││▾ Editar src/lib.rs (edit) ● en curso               │
-│ 10     }                                                       ││    tipo: edit · estado: en curso                   │
-│ 11     if name.contains('/') || name.contains(' ') {           ││                                                    │
-│ 12         return Err("carácter no permitido".to_string());    ││                                                    │
-│ 13     }                                                       ││                                                    │
-│ 14     Ok(())                                                  ││                                                    │
-│ 15 }                                                           ││                                                    │
-│ 16                                                             ││                                                    │
-│ 17 fn main() -> io::Result<()> {                               ││                                                    │
-│ 18     let cfg = config::load()?;                              ││                                                    │
-│ 19     session::run(cfg)                                       ││                                                    │
-│ 20 }                                                           ││┌ Mensaje · Enter envía · Alt+Enter salto ─────────┐│
-│~                                                               │││Escribe un mensaje…                               ││
-│~                                                               ││└──────────────────────────────────────────────────┘│
-└────────────────────────────────────────────────────────────────┘└────────────────────────────────────────────────────┘
+┌ Archivos ────────────┐┌ nvim · src/main.rs ───────────────────────────────┐┌ Agente · claude · ● trabajando ─────────┐
+│ ▸ .github/           ││  1 use std::io;                                   ││› Mejora la validación del nombre de     │
+│ ▾ src/ •             ││  2                                                ││  tarea en src/lib.rs                    │
+│   ▸ util/            ││  3 mod config;                                    ││                                         │
+│     config.rs        ││  4 mod session;                                   ││  Voy a leer el módulo actual y después  │
+│›  M lib.rs           ││  5                                                ││  aplico el cambio con errores           │
+│     main.rs          ││  6 /// Valida el nombre de una tarea nueva.       ││  descriptivos.                          │
+│   A session.rs       ││  7 pub fn validate_name(name: &str) -> Result<(),…││                                         │
+│ ▸ tests/             ││  8     if name.is_empty() {                       ││▸ Leer src/main.rs (read) ✓ completado   │
+│   .gitignore         ││  9         return Err("nombre vacío".to_string());││                                         │
+│   Cargo.toml         ││ 10     }                                          ││▾ Editar src/lib.rs (edit) ● en curso    │
+│   README.md          ││ 11     if name.contains('/') || name.contains(' '…││    tipo: edit · estado: en curso        │
+│ ? notas.txt          ││ 12         return Err("carácter no permitido".to_…││                                         │
+│                      ││ 13     }                                          ││                                         │
+│                      ││ 14     Ok(())                                     ││                                         │
+│                      ││ 15 }                                              ││                                         │
+│                      ││ 16                                                ││                                         │
+│                      ││ 17 fn main() -> io::Result<()> {                  ││                                         │
+│                      ││ 18     let cfg = config::load()?;                 ││                                         │
+│                      ││ 19     session::run(cfg)                          ││                                         │
+│                      ││ 20 }                                              ││┌ Mensaje · Enter envía · Alt+Enter sal…┐│
+│                      ││~                                                  │││Escribe un mensaje…                    ││
+│                      ││~                                                  ││└───────────────────────────────────────┘│
+└──────────────────────┘└───────────────────────────────────────────────────┘└─────────────────────────────────────────┘
 ┌ zsh ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │test config::tests::loads_defaults ... ok                                                                             │
 │test config::tests::rejects_unknown_agent ... ok                                                                      │

@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::demo::fake_changes;
+use crate::explorer::{visible_rows, RowKind};
 use crate::state::{AgentStatus, AppState, ChatItem, ConfirmAction, Modal, Pane, Task, ToastLevel};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +56,7 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
         }
         Action::ToggleZoom => state.zoom = !state.zoom,
         Action::ToggleTerminal => state.terminal_minimized = !state.terminal_minimized,
+        Action::ToggleExplorer => toggle_explorer(state),
     }
     Vec::new()
 }
@@ -66,8 +68,24 @@ fn tick(state: &mut AppState) {
     state.toasts.retain(|t| t.ttl_ticks > 0);
 }
 
+fn toggle_explorer(state: &mut AppState) {
+    if state.compact {
+        // En compacto el explorador es una pestaña: Alt+e entra y sale de ella.
+        state.focus = if state.focus == Pane::Explorer {
+            Pane::Editor
+        } else {
+            Pane::Explorer
+        };
+        return;
+    }
+    state.explorer_toggled = !state.explorer_toggled;
+    if !state.explorer_visible() && state.focus == Pane::Explorer {
+        state.focus = Pane::Editor;
+    }
+}
+
 fn focus_horizontal(state: &mut AppState, right: bool) {
-    const ORDER: [Pane; 3] = [Pane::Editor, Pane::Agent, Pane::Terminal];
+    const ORDER: [Pane; 4] = [Pane::Explorer, Pane::Editor, Pane::Agent, Pane::Terminal];
     if state.compact {
         let pos = ORDER.iter().position(|p| *p == state.focus).unwrap_or(0);
         let next = if right {
@@ -79,6 +97,8 @@ fn focus_horizontal(state: &mut AppState, right: bool) {
         return;
     }
     state.focus = match (state.focus, right) {
+        (Pane::Editor, false) if state.explorer_visible() => Pane::Explorer,
+        (Pane::Explorer, true) => Pane::Editor,
         (Pane::Editor, true) => Pane::Agent,
         (Pane::Agent, false) => Pane::Editor,
         (other, _) => other,
@@ -144,10 +164,12 @@ fn is_text_modifier(m: KeyModifiers) -> bool {
 fn handle_key(state: &mut AppState, key: KeyEvent) {
     match state.modal {
         Modal::None => {
-            if state.focus == Pane::Agent {
-                agent_key(state, key);
+            match state.focus {
+                Pane::Agent => agent_key(state, key),
+                Pane::Explorer => explorer_key(state, key),
+                // Editor y Terminal: en la demo las teclas se ignoran.
+                Pane::Editor | Pane::Terminal => {}
             }
-            // Editor y Terminal: en la demo las teclas se ignoran.
         }
         Modal::NewTask { .. } => new_task_key(state, key),
         Modal::Confirm { .. } => confirm_key(state, key),
@@ -157,6 +179,64 @@ fn handle_key(state: &mut AppState, key: KeyEvent) {
                 state.modal = Modal::None;
             }
         }
+    }
+}
+
+fn explorer_key(state: &mut AppState, key: KeyEvent) {
+    if !is_text_modifier(key.modifiers) {
+        return;
+    }
+    let mut toast = None;
+    let mut open_in_editor = false;
+    {
+        let Some(task) = state.active_task_mut() else {
+            return;
+        };
+        if key.code == KeyCode::Char('r') {
+            toast = Some("DEMO: árbol refrescado".to_string());
+        }
+        let rows = visible_rows(&task.files, &task.explorer.expanded);
+        if rows.is_empty() {
+            if let Some(text) = toast {
+                state.push_toast(text, ToastLevel::Info);
+            }
+            return;
+        }
+        let ex = &mut task.explorer;
+        ex.selected = ex.selected.min(rows.len() - 1);
+        let row = &rows[ex.selected];
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                ex.selected = (ex.selected + 1).min(rows.len() - 1)
+            }
+            KeyCode::Char('k') | KeyCode::Up => ex.selected = ex.selected.saturating_sub(1),
+            KeyCode::Char('l') | KeyCode::Enter if row.is_dir() => {
+                if !ex.expanded.remove(&row.path) {
+                    ex.expanded.insert(row.path.clone());
+                }
+            }
+            KeyCode::Enter => {
+                task.editor_file = Some(row.path.clone());
+                toast = Some(format!("DEMO: se abriría {} en nvim (--remote)", row.path));
+                open_in_editor = true;
+            }
+            KeyCode::Char('h') => {
+                if matches!(row.kind, RowKind::Dir { expanded: true, .. }) {
+                    ex.expanded.remove(&row.path);
+                } else if let Some(parent) = row.parent_path() {
+                    if let Some(i) = rows.iter().position(|r| r.path == parent) {
+                        ex.selected = i;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if open_in_editor {
+        state.focus = Pane::Editor;
+    }
+    if let Some(text) = toast {
+        state.push_toast(text, ToastLevel::Info);
     }
 }
 
@@ -410,11 +490,11 @@ mod tests {
         update(&mut s, Action::FocusUp);
         assert_eq!(s.focus, Pane::Editor);
         update(&mut s, Action::FocusLeft);
-        assert_eq!(s.focus, Pane::Editor);
+        assert_eq!(s.focus, Pane::Explorer);
     }
 
     #[test]
-    fn compact_focus_cycles() {
+    fn compact_focus_cycles_through_four_panes() {
         let mut s = demo_state();
         s.compact = true;
         s.focus = Pane::Editor;
@@ -422,9 +502,209 @@ mod tests {
         update(&mut s, Action::FocusRight);
         assert_eq!(s.focus, Pane::Terminal);
         update(&mut s, Action::FocusRight);
+        assert_eq!(s.focus, Pane::Explorer);
+        update(&mut s, Action::FocusRight);
         assert_eq!(s.focus, Pane::Editor);
         update(&mut s, Action::FocusLeft);
+        assert_eq!(s.focus, Pane::Explorer);
+        update(&mut s, Action::FocusLeft);
         assert_eq!(s.focus, Pane::Terminal);
+    }
+
+    fn full_layout() -> AppState {
+        let mut s = demo_state();
+        s.set_layout(false, true);
+        s
+    }
+
+    #[test]
+    fn explorer_focus_neighbours() {
+        let mut s = full_layout();
+        s.focus = Pane::Editor;
+        update(&mut s, Action::FocusLeft);
+        assert_eq!(s.focus, Pane::Explorer);
+        update(&mut s, Action::FocusLeft);
+        assert_eq!(s.focus, Pane::Explorer);
+        update(&mut s, Action::FocusRight);
+        assert_eq!(s.focus, Pane::Editor);
+        update(&mut s, Action::FocusLeft);
+        update(&mut s, Action::FocusDown);
+        assert_eq!(s.focus, Pane::Terminal);
+        update(&mut s, Action::FocusUp);
+        assert_eq!(s.focus, Pane::Editor);
+    }
+
+    #[test]
+    fn hidden_explorer_is_not_a_focus_target() {
+        let mut s = demo_state();
+        s.set_layout(false, false);
+        s.focus = Pane::Editor;
+        update(&mut s, Action::FocusLeft);
+        assert_eq!(s.focus, Pane::Editor);
+    }
+
+    #[test]
+    fn toggling_explorer_hides_it_and_moves_focus() {
+        let mut s = full_layout();
+        assert!(s.explorer_visible());
+        s.focus = Pane::Explorer;
+        update(&mut s, Action::ToggleExplorer);
+        assert!(!s.explorer_visible());
+        assert_eq!(s.focus, Pane::Editor);
+        update(&mut s, Action::ToggleExplorer);
+        assert!(s.explorer_visible());
+    }
+
+    #[test]
+    fn medium_tier_starts_hidden_and_toggle_shows_it() {
+        let mut s = demo_state();
+        s.set_layout(false, false);
+        assert!(!s.explorer_visible());
+        update(&mut s, Action::ToggleExplorer);
+        assert!(s.explorer_visible());
+    }
+
+    #[test]
+    fn resize_that_hides_explorer_moves_focus() {
+        let mut s = full_layout();
+        s.focus = Pane::Explorer;
+        s.set_layout(false, false);
+        assert_eq!(s.focus, Pane::Editor);
+    }
+
+    #[test]
+    fn compact_alt_e_enters_and_leaves_the_explorer_tab() {
+        let mut s = demo_state();
+        s.set_layout(true, false);
+        s.focus = Pane::Agent;
+        update(&mut s, Action::ToggleExplorer);
+        assert_eq!(s.focus, Pane::Explorer);
+        update(&mut s, Action::ToggleExplorer);
+        assert_eq!(s.focus, Pane::Editor);
+    }
+
+    fn explorer_focused() -> AppState {
+        let mut s = full_layout();
+        s.focus = Pane::Explorer;
+        s
+    }
+
+    fn selected_path(s: &AppState) -> String {
+        let t = s.active_task().expect("tarea activa");
+        let rows = visible_rows(&t.files, &t.explorer.expanded);
+        rows[t.explorer.selected].path.clone()
+    }
+
+    #[test]
+    fn explorer_selection_moves_and_clamps() {
+        let mut s = explorer_focused();
+        let n = {
+            let t = &s.tasks[0];
+            visible_rows(&t.files, &t.explorer.expanded).len()
+        };
+        s.tasks[0].explorer.selected = 0;
+        press(&mut s, KeyCode::Char('k'));
+        assert_eq!(s.tasks[0].explorer.selected, 0);
+        press(&mut s, KeyCode::Char('j'));
+        press(&mut s, KeyCode::Down);
+        assert_eq!(s.tasks[0].explorer.selected, 2);
+        press(&mut s, KeyCode::Up);
+        assert_eq!(s.tasks[0].explorer.selected, 1);
+        for _ in 0..(n + 5) {
+            press(&mut s, KeyCode::Char('j'));
+        }
+        assert_eq!(s.tasks[0].explorer.selected, n - 1);
+    }
+
+    #[test]
+    fn explorer_enter_and_l_toggle_dirs_h_collapses() {
+        let mut s = explorer_focused();
+        s.tasks[0].explorer.expanded.clear();
+        s.tasks[0].explorer.selected = 0;
+        let dir = selected_path(&s);
+        press(&mut s, KeyCode::Enter);
+        assert!(s.tasks[0].explorer.expanded.contains(&dir));
+        assert_eq!(s.focus, Pane::Explorer);
+        press(&mut s, KeyCode::Char('l'));
+        assert!(!s.tasks[0].explorer.expanded.contains(&dir));
+        press(&mut s, KeyCode::Char('l'));
+        assert!(s.tasks[0].explorer.expanded.contains(&dir));
+        press(&mut s, KeyCode::Char('h'));
+        assert!(!s.tasks[0].explorer.expanded.contains(&dir));
+        assert_eq!(selected_path(&s), dir);
+    }
+
+    #[test]
+    fn explorer_h_on_file_or_collapsed_dir_goes_to_parent() {
+        let mut s = explorer_focused();
+        let t = &mut s.tasks[0];
+        t.explorer.expanded.clear();
+        t.explorer.expanded.insert("src".to_string());
+        t.explorer.expanded.insert("src/util".to_string());
+        let rows = visible_rows(&t.files, &t.explorer.expanded);
+        t.explorer.selected = rows
+            .iter()
+            .position(|r| r.path == "src/util/mod.rs")
+            .expect("fila");
+        press(&mut s, KeyCode::Char('h'));
+        assert_eq!(selected_path(&s), "src/util");
+        press(&mut s, KeyCode::Char('h')); // expandida: se contrae
+        assert_eq!(selected_path(&s), "src/util");
+        press(&mut s, KeyCode::Char('h')); // contraída: sube a src
+        assert_eq!(selected_path(&s), "src");
+        press(&mut s, KeyCode::Char('h')); // src expandida: se contrae
+        press(&mut s, KeyCode::Char('h')); // raíz: sin padre, no se mueve
+        assert_eq!(selected_path(&s), "src");
+        assert!(!s.tasks[0].explorer.expanded.contains("src"));
+    }
+
+    #[test]
+    fn explorer_enter_on_file_opens_in_editor() {
+        let mut s = explorer_focused();
+        let t = &mut s.tasks[0];
+        t.explorer.expanded.insert("src".to_string());
+        let rows = visible_rows(&t.files, &t.explorer.expanded);
+        t.explorer.selected = rows
+            .iter()
+            .position(|r| r.path == "src/config.rs")
+            .expect("fila");
+        press(&mut s, KeyCode::Enter);
+        assert_eq!(s.tasks[0].editor_file.as_deref(), Some("src/config.rs"));
+        assert_eq!(s.focus, Pane::Editor);
+        assert_eq!(
+            s.toasts.last().map(|t| t.text.as_str()),
+            Some("DEMO: se abriría src/config.rs en nvim (--remote)")
+        );
+    }
+
+    #[test]
+    fn explorer_r_shows_refresh_toast() {
+        let mut s = explorer_focused();
+        press(&mut s, KeyCode::Char('r'));
+        assert_eq!(
+            s.toasts.last().map(|t| t.text.as_str()),
+            Some("DEMO: árbol refrescado")
+        );
+    }
+
+    #[test]
+    fn explorer_keys_are_ignored_under_a_modal() {
+        let mut s = explorer_focused();
+        update(&mut s, Action::Help);
+        let before = s.tasks[0].explorer.selected;
+        press(&mut s, KeyCode::Char('j'));
+        assert_eq!(s.tasks[0].explorer.selected, before);
+    }
+
+    #[test]
+    fn explorer_keys_with_no_files_do_not_panic() {
+        let mut s = explorer_focused();
+        s.tasks[0].files.clear();
+        for c in ['j', 'k', 'h', 'l', 'r'] {
+            press(&mut s, KeyCode::Char(c));
+        }
+        press(&mut s, KeyCode::Enter);
+        assert_eq!(s.focus, Pane::Explorer);
     }
 
     #[test]

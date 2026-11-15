@@ -3,7 +3,7 @@ source: crates/qorvi-tui/tests/snapshots.rs
 expression: "snap(&state(), 70, 20)"
 ---
  [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
-  Editor  |  Agente  |  Terminal    ● trabajando
+  Archivos  |  Editor  |  Agente  |  Terminal    ● trabajando
 ┌ Agente · claude · ● trabajando ────────────────────────────────────┐
 │› Mejora la validación del nombre de tarea en src/lib.rs            │
 │                                                                    │

@@ -1,7 +1,9 @@
 //! Datos falsos para `qorvi --demo`. Nada de aquí toca procesos, git ni red.
 
+use crate::explorer::{visible_rows, RowKind};
 use crate::state::{
-    AgentStatus, AppState, ChangeKind, ChangedFile, ChatItem, Modal, Pane, Task, ToolStatus,
+    AgentStatus, AppState, ChangeKind, ChangeMark, ChangedFile, ChatItem, FileEntry, Modal, Pane,
+    Task, ToolStatus,
 };
 
 fn lines(items: &[&str]) -> Vec<String> {
@@ -103,8 +105,41 @@ pub fn fake_changes() -> Vec<ChangedFile> {
     ]
 }
 
-fn task(name: &str, agent: &str, status: AgentStatus, cost: f64, chat: Vec<ChatItem>) -> Task {
+/// Árbol de ejemplo: `(ruta, marca)` con `M`/`A`/`D`/`?` o `' '` sin cambios.
+fn tree(items: &[(&str, char)]) -> Vec<FileEntry> {
+    items
+        .iter()
+        .map(|(path, m)| FileEntry {
+            path: path.to_string(),
+            mark: match m {
+                'M' => Some(ChangeMark::Modified),
+                'A' => Some(ChangeMark::Added),
+                'D' => Some(ChangeMark::Deleted),
+                '?' => Some(ChangeMark::Untracked),
+                _ => None,
+            },
+        })
+        .collect()
+}
+
+fn task(
+    name: &str,
+    agent: &str,
+    status: AgentStatus,
+    cost: f64,
+    chat: Vec<ChatItem>,
+    files: &[(&str, char)],
+) -> Task {
     let mut t = Task::new(name, agent, "main");
+    t.files = tree(files);
+    t.editor_file = Some("src/main.rs".to_string());
+    t.explorer.expanded.insert("src".to_string());
+    // La selección arranca en el primer archivo con cambios.
+    let rows = visible_rows(&t.files, &t.explorer.expanded);
+    t.explorer.selected = rows
+        .iter()
+        .position(|r| matches!(r.kind, RowKind::File { mark: Some(_) }))
+        .unwrap_or(0);
     t.status = status;
     t.cost_usd = cost;
     t.chat = chat;
@@ -138,6 +173,20 @@ pub fn demo_state() -> AppState {
                 expanded: true,
             },
         ],
+        &[
+            (".github/workflows/ci.yml", ' '),
+            (".gitignore", ' '),
+            ("Cargo.toml", ' '),
+            ("README.md", ' '),
+            ("notas.txt", '?'),
+            ("src/config.rs", ' '),
+            ("src/lib.rs", 'M'),
+            ("src/main.rs", ' '),
+            ("src/session.rs", 'A'),
+            ("src/util/fs.rs", ' '),
+            ("src/util/mod.rs", ' '),
+            ("tests/integration.rs", ' '),
+        ],
     );
     let app13 = task(
         "APP-13",
@@ -153,6 +202,21 @@ pub fn demo_state() -> AppState {
                 selected: 0,
                 resolved: None,
             },
+        ],
+        &[
+            (".github/workflows/ci.yml", ' '),
+            (".gitignore", ' '),
+            ("Cargo.lock", ' '),
+            ("Cargo.toml", ' '),
+            ("README.md", ' '),
+            ("src/config.rs", 'M'),
+            ("src/legacy.rs", 'D'),
+            ("src/lib.rs", ' '),
+            ("src/main.rs", ' '),
+            ("src/session/mod.rs", ' '),
+            ("src/session/store.rs", ' '),
+            ("tests/config.rs", 'M'),
+            ("tests/integration.rs", ' '),
         ],
     );
     let fix_login = task(
@@ -170,6 +234,22 @@ pub fn demo_state() -> AppState {
             },
             ChatItem::Agent("Listo: el login ahora rechaza contraseñas vacías.".to_string()),
         ],
+        &[
+            (".github/workflows/ci.yml", ' '),
+            (".gitignore", ' '),
+            ("Cargo.toml", ' '),
+            ("README.md", ' '),
+            ("docs/login.md", '?'),
+            ("src/auth.rs", 'M'),
+            ("src/config.rs", ' '),
+            ("src/lib.rs", ' '),
+            ("src/login.rs", 'M'),
+            ("src/main.rs", ' '),
+            ("src/session/mod.rs", ' '),
+            ("src/session/store.rs", ' '),
+            ("tests/integration.rs", ' '),
+            ("tests/login.rs", 'A'),
+        ],
     );
     AppState {
         tasks: vec![app12, app13, fix_login],
@@ -177,6 +257,7 @@ pub fn demo_state() -> AppState {
         focus: Pane::Agent,
         zoom: false,
         terminal_minimized: false,
+        explorer_toggled: false,
         modal: Modal::None,
         toasts: Vec::new(),
         last_toast: None,
@@ -185,5 +266,6 @@ pub fn demo_state() -> AppState {
         should_quit: false,
         ascii: std::env::var("QORVI_ASCII").is_ok_and(|v| v == "1"),
         compact: false,
+        explorer_default: true,
     }
 }

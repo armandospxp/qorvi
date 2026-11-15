@@ -86,6 +86,51 @@ fn new_task_modal_90x28() {
 }
 
 #[test]
+fn explorer_focused_120x35() {
+    let mut s = state();
+    s.focus = Pane::Explorer;
+    let t = &mut s.tasks[0];
+    t.explorer.expanded.insert("src/util".to_string());
+    t.explorer.selected = 9;
+    insta::assert_snapshot!(snap(&s, 120, 35));
+}
+
+#[test]
+fn explorer_toggled_on_90x28() {
+    let mut s = state();
+    s.explorer_toggled = true;
+    s.focus = Pane::Explorer;
+    insta::assert_snapshot!(snap(&s, 90, 28));
+}
+
+#[test]
+fn compact_explorer_80x24() {
+    let mut s = state();
+    s.focus = Pane::Explorer;
+    insta::assert_snapshot!(snap(&s, 80, 24));
+}
+
+#[test]
+fn explorer_marks_are_visible_and_deleted_is_crossed_out() {
+    use ratatui::style::Modifier;
+    let mut s = state();
+    s.active = 1;
+    let buf = render(&s, 120, 35);
+    let rows = text(&buf);
+    let (y, line) = rows
+        .lines()
+        .enumerate()
+        .find(|(_, l)| l.contains("legacy.rs"))
+        .expect("fila de legacy.rs");
+    assert!(line.contains("D legacy.rs"), "{line}");
+    let x = line.chars().position(|c| c == 'l').expect("columna");
+    assert!(buf[(x as u16, y as u16)]
+        .modifier
+        .contains(Modifier::CROSSED_OUT));
+    assert!(rows.contains("M config.rs"));
+}
+
+#[test]
 fn compact_agent_80x24() {
     let mut s = state();
     s.focus = Pane::Agent;
@@ -147,9 +192,16 @@ fn render_never_panics() {
 
     for modal in &modals {
         for zoom in [false, true] {
-            for focus in [Pane::Editor, Pane::Agent, Pane::Terminal] {
-                for minimized in [false, true] {
+            for focus in [Pane::Explorer, Pane::Editor, Pane::Agent, Pane::Terminal] {
+                for (minimized, explorer_toggled) in
+                    [(false, false), (true, false), (false, true), (true, true)]
+                {
                     let mut s = state();
+                    s.explorer_toggled = explorer_toggled;
+                    s.tasks[0].explorer.expanded.extend(
+                        ["src", "src/util", ".github", ".github/workflows", "tests"]
+                            .map(String::from),
+                    );
                     s.modal = modal.clone();
                     s.zoom = zoom;
                     s.focus = focus;

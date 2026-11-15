@@ -1,0 +1,32 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 90, 28)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ Archivos ────────┐┌ nvim · src/main.rs ─────────────────┐┌ Agente · claude · ● trabaja…┐
+│ ▸ .github/       ││  1 use std::io;                     ││› Mejora la validación del   │
+│ ▾ src/ •         ││  2                                  ││  nombre de tarea en         │
+│   ▸ util/        ││  3 mod config;                      ││  src/lib.rs                 │
+│     config.rs    ││  4 mod session;                     ││                             │
+│›  M lib.rs       ││  5                                  ││  Voy a leer el módulo actual│
+│     main.rs      ││  6 /// Valida el nombre de una tare…││  y después aplico el cambio │
+│   A session.rs   ││  7 pub fn validate_name(name: &str)…││  con errores descriptivos.  │
+│ ▸ tests/         ││  8     if name.is_empty() {         ││                             │
+│   .gitignore     ││  9         return Err("nombre vacío…││▸ Leer src/main.rs (read) ✓ …│
+│   Cargo.toml     ││ 10     }                            ││                             │
+│   README.md      ││ 11     if name.contains('/') || nam…││▾ Editar src/lib.rs (edit) ●…│
+│ ? notas.txt      ││ 12         return Err("carácter no …││    tipo: edit · estado: en …│
+│                  ││ 13     }                            ││                             │
+│                  ││ 14     Ok(())                       ││                             │
+│                  ││ 15 }                                ││                             │
+│                  ││ 16                                  ││                             │
+│                  ││ 17 fn main() -> io::Result<()> {    ││                             │
+│                  ││ 18     let cfg = config::load()?;   ││                             │
+│                  ││ 19     session::run(cfg)            ││                             │
+│                  ││ 20 }                                ││                             │
+│                  ││~                                    ││┌ Mensaje · Enter envía · A…┐│
+│                  ││~                                    │││Escribe un mensaje…        ││
+│                  ││~                                    ││└───────────────────────────┘│
+└──────────────────┘└─────────────────────────────────────┘└─────────────────────────────┘
+ ▸ Terminal (minimizada) · Alt+t para desplegar
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: F1
