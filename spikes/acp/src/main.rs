@@ -224,6 +224,11 @@ async fn main() -> Result<()> {
             };
 
             while let Some(line) = line_rx.recv().await {
+                // Un prompt vacío cuesta un turno completo del modelo: nunca se envía.
+                let line = line.trim().to_string();
+                if line.is_empty() {
+                    continue;
+                }
                 // "!N" responde a un permiso: espera a que haya uno pendiente y se
                 // descarta si el turno termina sin pedirlo. El resto de líneas esperan
                 // a que no haya turno en curso ("/cancel" va inmediato).
@@ -387,6 +392,19 @@ fn print_update(update: &SessionUpdate) {
         SessionUpdate::Plan(_) => log!("plan actualizado"),
         SessionUpdate::AvailableCommandsUpdate(_) => log!("comandos disponibles actualizados"),
         SessionUpdate::CurrentModeUpdate(m) => log!("modo: {m:?}"),
+        SessionUpdate::UsageUpdate(u) => {
+            // Solo el que trae coste (el agente manda varios por turno).
+            if let Some(c) = &u.cost {
+                log!(
+                    "uso: contexto {}/{} tokens, coste acumulado {:.4} {}",
+                    u.used,
+                    u.size,
+                    c.amount,
+                    c.currency
+                );
+            }
+        }
+        SessionUpdate::SessionInfoUpdate(i) => log!("info de sesión: título={:?}", i.title),
         other => {
             let s = format!("{other:?}");
             log!("update: {}", s.chars().take(100).collect::<String>());
