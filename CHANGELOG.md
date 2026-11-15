@@ -7,4 +7,5 @@ versionado: [SemVer](https://semver.org/lang/es/).
 ## [Unreleased]
 
 ### Añadido
-- Esqueleto del workspace, CI multiplataforma y `AGENTS.md`.
+- Esqueleto del workspace y CI multiplataforma.
+- Spike de PTY (portable-pty + vt100 + tui-term) con respuesta a consultas de terminal.
