@@ -21,4 +21,4 @@ expression: "snap(&state(), 70, 20)"
 ││Escribe un mensaje…                                               ││
 │└──────────────────────────────────────────────────────────────────┘│
 └────────────────────────────────────────────────────────────────────┘
- DEMO  │ APP-12 │ qorvi/APP-12 │ ● trabajando │ foco: Agente │ $0.42
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Agente │ $0.42

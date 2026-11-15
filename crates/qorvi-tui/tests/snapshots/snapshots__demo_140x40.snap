@@ -41,4 +41,4 @@ expression: "snap(&state(), 140, 40)"
 │test result: ok. 4 passed; 0 failed; 0 ignored                                                                                            │
 │$                                                                                                                                         │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- DEMO  │ APP-12 │ qorvi/APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: F1
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: F1

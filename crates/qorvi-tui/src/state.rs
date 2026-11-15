@@ -73,7 +73,7 @@ impl Task {
     pub fn new(name: &str, agent: &str, base_branch: &str) -> Self {
         Task {
             name: name.to_string(),
-            branch: format!("qorvi/{name}"),
+            branch: name.to_string(), // la rama se llama igual que la tarea (spec)
             base_branch: base_branch.to_string(),
             agent: agent.to_string(),
             status: AgentStatus::Idle,
