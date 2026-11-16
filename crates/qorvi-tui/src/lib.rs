@@ -28,6 +28,13 @@ const TICK: Duration = Duration::from_millis(250);
 /// Abre la TUI con datos falsos: sin procesos, git ni red.
 pub fn run_demo() -> io::Result<()> {
     let mut terminal = ratatui::init();
+    // ratatui::init ya restaura la terminal ante un panic, pero no sabe del ratón: se
+    // encadena un hook que lo desactiva antes, para no dejar la shell capturando clics.
+    let ratatui_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = execute!(io::stdout(), DisableMouseCapture);
+        ratatui_hook(info);
+    }));
     let result = execute!(io::stdout(), EnableMouseCapture)
         .and_then(|()| run(&mut terminal, demo::demo_state()));
     // Se desactiva también si `run` falló, para no dejar la terminal capturando el ratón.

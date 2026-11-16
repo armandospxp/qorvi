@@ -12,3 +12,4 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Spike de ACP: cliente con SDK 5.3 sobre `ByteStreams`, contención de rutas `fs/*` y agente fixture.
 - Mockup navegable de la TUI con datos falsos (`qorvi --demo`), con explorador de archivos.
 - Atajos con tecla prefijo `Ctrl+Space` + tecla (por defecto en macOS) además de `Alt+tecla` (por defecto en Windows/Linux); `Ctrl+Space q` sale siempre.
+- Ratón en la TUI: clic para enfocar paneles, cambiar de tarea, usar el explorador y elegir opciones de permiso; rueda para desplazar el chat y el explorador.
