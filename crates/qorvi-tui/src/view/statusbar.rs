@@ -7,7 +7,8 @@ use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 use super::{fg, text_width, truncate};
-use crate::state::{shortcut_label, AppState};
+use crate::shortcuts::shortcut_label;
+use crate::state::AppState;
 use crate::theme::{color, status_label, status_symbol, status_token, Token};
 
 struct Segment {
@@ -77,7 +78,10 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, small: bool) {
         None => segs.push(seg("sin tareas", fg(Token::Muted), 1)),
     }
     segs.push(seg(
-        format!("ayuda: {}", shortcut_label(state.shortcut_style, "?")),
+        format!(
+            "ayuda: {}",
+            shortcut_label(state.shortcut_style, state.direct_mod, "help")
+        ),
         fg(Token::Muted),
         7,
     ));

@@ -7,26 +7,12 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use super::{bold, centered, fg, tail, text_width, truncate, wrap};
-use crate::state::{shortcut_label, AppState, Modal};
+use crate::shortcuts::{direct_label, prefix_label, SHORTCUTS};
+use crate::state::{AppState, Modal, ShortcutStyle};
 use crate::theme::{color, Token};
 
-/// Atajos globales: tecla (la misma con `Alt+` o tras `Ctrl+Space`) y descripción.
-const HELP_GLOBAL: [(&str, &str); 10] = [
-    ("h/j/k/l", "mover el foco entre paneles"),
-    ("1..9", "ir a la tarea N"),
-    ("n", "nueva tarea"),
-    ("d", "review / diff"),
-    ("z", "zoom del panel"),
-    ("t", "mostrar/ocultar la terminal"),
-    ("e", "mostrar/ocultar el explorador de archivos"),
-    ("m", "ver de nuevo el último aviso"),
-    ("q", "salir"),
-    ("?", "esta ayuda"),
-];
-
 /// Teclas que no dependen de la forma de atajo.
-const HELP_FIXED: [(&str, &str); 8] = [
-    ("F1", "esta ayuda"),
+const HELP_FIXED: [(&str, &str); 7] = [
     ("F5..F8", "DEMO: trabajando/permiso/listo/error"),
     ("Enter", "enviar mensaje o confirmar permiso"),
     ("Alt+Enter", "salto de línea en el mensaje"),
@@ -167,15 +153,28 @@ fn confirm(frame: &mut Frame, area: Rect, message: &str) {
 
 /// Rectángulo del diálogo de ayuda dentro de `area`.
 pub fn help_rect(area: Rect) -> Rect {
-    centered(area, 68, (HELP_GLOBAL.len() + HELP_FIXED.len()) as u16 + 6)
+    centered(area, 86, (SHORTCUTS.len() + HELP_FIXED.len()) as u16 + 6)
 }
 
 fn help(state: &AppState, frame: &mut Frame, area: Rect) {
-    let style = state.shortcut_style;
-    let rows: Vec<(String, &str)> = HELP_GLOBAL
+    // Dos columnas: la forma que muestra el estilo y la otra. Las acciones sin atajo
+    // directo solo tienen el prefijo.
+    let rows: Vec<(String, String, &str)> = SHORTCUTS
         .iter()
-        .map(|(k, d)| (shortcut_label(style, k), *d))
-        .chain(HELP_FIXED.iter().map(|(k, d)| (k.to_string(), *d)))
+        .map(|s| {
+            let prefix = prefix_label(s);
+            let direct = s.direct.map(|c| direct_label(state.direct_mod, c));
+            match (state.shortcut_style, direct) {
+                (ShortcutStyle::Direct, Some(d)) => (d, prefix, s.desc),
+                (ShortcutStyle::Prefix, Some(d)) => (prefix, d, s.desc),
+                (_, None) => (prefix, String::new(), s.desc),
+            }
+        })
+        .chain(
+            HELP_FIXED
+                .iter()
+                .map(|(k, d)| (k.to_string(), String::new(), *d)),
+        )
         .collect();
     let rect = help_rect(area);
     if rect.width < 4 || rect.height < 3 {
@@ -186,17 +185,32 @@ fn help(state: &AppState, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     let w = usize::from(inner.width);
-    let key_w = rows.iter().map(|(k, _)| text_width(k)).max().unwrap_or(0) + 2;
-    let also = shortcut_label(style.other(), "<tecla>");
+    let col1 = rows
+        .iter()
+        .map(|(k, _, _)| text_width(k))
+        .max()
+        .unwrap_or(0)
+        + 2;
+    let col2 = rows
+        .iter()
+        .map(|(_, k, _)| text_width(k))
+        .max()
+        .unwrap_or(0)
+        + 2;
     let mut lines: Vec<Line> = vec![
-        Line::styled(truncate(&format!(" También: {also}"), w), fg(Token::Muted)),
+        Line::styled(
+            truncate(" También: Alt+<tecla> equivale a Ctrl+Space <tecla>", w),
+            fg(Token::Muted),
+        ),
         Line::raw(""),
     ];
-    lines.extend(rows.iter().map(|(k, d)| {
-        let key = format!(" {k:<width$}", width = key_w - 1);
-        let rest = w.saturating_sub(text_width(&key));
+    lines.extend(rows.iter().map(|(k1, k2, d)| {
+        let first = format!(" {k1:<width$}", width = col1 - 1);
+        let second = format!("{k2:<col2$}");
+        let rest = w.saturating_sub(text_width(&first) + text_width(&second));
         Line::from(vec![
-            Span::styled(key, bold(Token::Accent)),
+            Span::styled(first, bold(Token::Accent)),
+            Span::styled(second, fg(Token::Muted)),
             Span::styled(truncate(d, rest), fg(Token::Text)),
         ])
     }));

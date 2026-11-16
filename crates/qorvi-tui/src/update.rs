@@ -1264,19 +1264,34 @@ mod tests {
     }
 
     #[test]
-    fn shortcut_label_per_style() {
-        use crate::state::{shortcut_label, ShortcutStyle};
-        assert_eq!(shortcut_label(ShortcutStyle::Prefix, "d"), "Ctrl+Space d");
-        assert_eq!(shortcut_label(ShortcutStyle::Alt, "d"), "Alt+d");
-        assert_eq!(
-            ShortcutStyle::from_env_value("PREFIX"),
-            Some(ShortcutStyle::Prefix)
-        );
-        assert_eq!(
-            ShortcutStyle::from_env_value("alt"),
-            Some(ShortcutStyle::Alt)
-        );
-        assert_eq!(ShortcutStyle::from_env_value("x"), None);
+    fn shortcut_label_per_action_and_style() {
+        use crate::shortcuts::shortcut_label;
+        use crate::state::ShortcutStyle::{Direct, Prefix};
+        let (cmd, ctrl) = (KeyModifiers::SUPER, KeyModifiers::CONTROL);
+        let cases = [
+            (Direct, cmd, "review", "Cmd+Alt+R"),
+            (Direct, ctrl, "review", "Ctrl+Alt+R"),
+            (Direct, ctrl, "toggle_explorer", "Ctrl+B"),
+            (Direct, cmd, "toggle_terminal", "Cmd+J"),
+            (Direct, cmd, "new_task", "Cmd+Alt+N"),
+            (Direct, ctrl, "quit", "Ctrl+Alt+Q"),
+            (Direct, cmd, "select_task", "Cmd+1..9"),
+            (Direct, cmd, "focus_left", "Cmd+Alt+←"),
+            (Direct, ctrl, "focus_down", "Ctrl+Alt+↓"),
+            (Direct, ctrl, "focus_up", "Ctrl+Alt+↑"),
+            (Direct, ctrl, "focus_right", "Ctrl+Alt+→"),
+            (Direct, cmd, "help", "F1"),
+            // Sin atajo directo: siempre el prefijo.
+            (Direct, cmd, "zoom", "Ctrl+Space z"),
+            (Direct, ctrl, "last_toast", "Ctrl+Space m"),
+            (Prefix, cmd, "review", "Ctrl+Space d"),
+            (Prefix, ctrl, "toggle_explorer", "Ctrl+Space e"),
+            (Prefix, ctrl, "select_task", "Ctrl+Space 1..9"),
+            (Prefix, cmd, "help", "Ctrl+Space ?"),
+        ];
+        for (style, m, id, want) in cases {
+            assert_eq!(shortcut_label(style, m, id), want, "{id} {style:?} {m:?}");
+        }
     }
 }
 

@@ -1,5 +1,7 @@
 //! Datos falsos para `qorvi --demo`. Nada de aquí toca procesos, git ni red.
 
+use crossterm::event::KeyModifiers;
+
 use crate::explorer::{visible_rows, RowKind};
 use crate::state::{
     AgentStatus, AppState, ChangeKind, ChangeMark, ChangedFile, ChatItem, FileEntry, Modal, Pane,
@@ -265,10 +267,13 @@ pub fn demo_state() -> AppState {
         demo: true,
         should_quit: false,
         ascii: std::env::var("QORVI_ASCII").is_ok_and(|v| v == "1"),
-        shortcut_style: std::env::var("QORVI_KEYS")
-            .ok()
-            .and_then(|v| ShortcutStyle::from_env_value(&v))
-            .unwrap_or_else(ShortcutStyle::os_default),
+        // El bucle de eventos fija el estilo tras detectar la terminal.
+        shortcut_style: ShortcutStyle::Prefix,
+        direct_mod: if cfg!(target_os = "macos") {
+            KeyModifiers::SUPER
+        } else {
+            KeyModifiers::CONTROL
+        },
         prefix_pending: false,
         compact: false,
         explorer_default: true,

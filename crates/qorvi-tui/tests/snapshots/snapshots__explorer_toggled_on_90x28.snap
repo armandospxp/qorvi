@@ -28,5 +28,5 @@ expression: "snap(&s, 90, 28)"
 │                  ││~                                    │││Escribe un mensaje…        ││
 │                  ││~                                    ││└───────────────────────────┘│
 └──────────────────┘└─────────────────────────────────────┘└─────────────────────────────┘
- ▸ Terminal (minimizada) · Alt+t para desplegar
- DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: Alt+?
+ ▸ Terminal (minimizada) · Ctrl+J para desplegar
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: F1

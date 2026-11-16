@@ -15,7 +15,8 @@ fn state() -> AppState {
     let mut s = demo_state();
     s.ascii = false;
     // Fijo: el resultado no puede depender del sistema operativo ni de QORVI_KEYS.
-    s.shortcut_style = ShortcutStyle::Alt;
+    s.shortcut_style = ShortcutStyle::Direct;
+    s.direct_mod = KeyModifiers::CONTROL;
     s.prefix_pending = false;
     s
 }
@@ -179,6 +180,15 @@ fn help_prefix_style_120x35() {
 }
 
 #[test]
+fn help_direct_mac_120x35() {
+    let mut s = state();
+    s.shortcut_style = ShortcutStyle::Direct;
+    s.direct_mod = KeyModifiers::SUPER;
+    s.modal = Modal::Help;
+    insta::assert_snapshot!(snap(&s, 120, 35));
+}
+
+#[test]
 fn chat_scrolled_120x35() {
     let mut s = state();
     let t = &mut s.tasks[0];
@@ -305,7 +315,12 @@ fn render_never_panics() {
                     s.shortcut_style = if zoom {
                         ShortcutStyle::Prefix
                     } else {
-                        ShortcutStyle::Alt
+                        ShortcutStyle::Direct
+                    };
+                    s.direct_mod = if minimized {
+                        KeyModifiers::SUPER
+                    } else {
+                        KeyModifiers::CONTROL
                     };
                     s.tasks[0].explorer.expanded.extend(
                         ["src", "src/util", ".github", ".github/workflows", "tests"]
