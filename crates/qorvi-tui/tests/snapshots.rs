@@ -1,5 +1,10 @@
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use qorvi_tui::action::Action;
 use qorvi_tui::demo::{demo_state, fake_changes};
-use qorvi_tui::state::{AppState, ConfirmAction, Modal, Pane, ShortcutStyle, Toast, ToastLevel};
+use qorvi_tui::state::{
+    AppState, ChatItem, ConfirmAction, Modal, Pane, ShortcutStyle, Toast, ToastLevel,
+};
+use qorvi_tui::update::update;
 use qorvi_tui::view::view;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
@@ -171,6 +176,85 @@ fn help_prefix_style_120x35() {
     s.shortcut_style = ShortcutStyle::Prefix;
     s.modal = Modal::Help;
     insta::assert_snapshot!(snap(&s, 120, 35));
+}
+
+#[test]
+fn chat_scrolled_120x35() {
+    let mut s = state();
+    let t = &mut s.tasks[0];
+    t.chat = (1..=30)
+        .map(|i| ChatItem::Agent(format!("Mensaje de prueba número {i}.")))
+        .collect();
+    t.chat_scroll = 7;
+    insta::assert_snapshot!(snap(&s, 120, 35));
+}
+
+#[test]
+fn mouse_never_panics() {
+    let modals = [
+        Modal::None,
+        Modal::Help,
+        Modal::NewTask {
+            name: "x".to_string(),
+            agent_idx: 0,
+            base: "main".to_string(),
+            field: 0,
+        },
+        Modal::Confirm {
+            message: "¿Descartar?".to_string(),
+            action: ConfirmAction::DiscardTask(0),
+        },
+        Modal::Review {
+            files: fake_changes(),
+            selected: 0,
+        },
+    ];
+    let sizes = [
+        (0, 0),
+        (1, 1),
+        (10, 5),
+        (40, 10),
+        (45, 14),
+        (70, 20),
+        (90, 28),
+        (120, 35),
+        (140, 40),
+    ];
+    for modal in &modals {
+        for zoom in [false, true] {
+            for focus in [Pane::Explorer, Pane::Editor, Pane::Agent, Pane::Terminal] {
+                for (w, h) in sizes {
+                    let mut s = state();
+                    s.size = (w, h);
+                    s.modal = modal.clone();
+                    s.zoom = zoom;
+                    s.focus = focus;
+                    s.tasks[0].explorer.expanded.insert("src".to_string());
+                    for x in (0..w + 3).step_by(3) {
+                        for y in 0..h + 3 {
+                            for kind in [
+                                MouseEventKind::Down(MouseButton::Left),
+                                MouseEventKind::ScrollUp,
+                                MouseEventKind::ScrollDown,
+                            ] {
+                                let m = MouseEvent {
+                                    kind,
+                                    column: x,
+                                    row: y,
+                                    modifiers: KeyModifiers::NONE,
+                                };
+                                update(&mut s, Action::Mouse(m));
+                                // Todo clic deja un estado que se puede dibujar.
+                                if x % 30 == 0 && y % 7 == 0 && w > 0 && h > 0 {
+                                    render(&s, w, h);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[test]

@@ -1,0 +1,39 @@
+---
+source: crates/qorvi-tui/tests/snapshots.rs
+expression: "snap(&s, 120, 35)"
+---
+ [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
+┌ Archivos ────────────┐┌ nvim · src/main.rs ───────────────────────────────┐┌ Agente · claude · ● trabajando ─────────┐
+│ ▸ .github/           ││  1 use std::io;                                   ││                                         │
+│ ▾ src/ •             ││  2                                                ││  Mensaje de prueba número 18.           │
+│   ▸ util/            ││  3 mod config;                                    ││                                         │
+│     config.rs        ││  4 mod session;                                   ││  Mensaje de prueba número 19.           │
+│›  M lib.rs           ││  5                                                ││                                         │
+│     main.rs          ││  6 /// Valida el nombre de una tarea nueva.       ││  Mensaje de prueba número 20.           │
+│   A session.rs       ││  7 pub fn validate_name(name: &str) -> Result<(),…││                                         │
+│ ▸ tests/             ││  8     if name.is_empty() {                       ││  Mensaje de prueba número 21.           │
+│   .gitignore         ││  9         return Err("nombre vacío".to_string());││                                         │
+│   Cargo.toml         ││ 10     }                                          ││  Mensaje de prueba número 22.           │
+│   README.md          ││ 11     if name.contains('/') || name.contains(' '…││                                         │
+│ ? notas.txt          ││ 12         return Err("carácter no permitido".to_…││  Mensaje de prueba número 23.           │
+│                      ││ 13     }                                          ││                                         │
+│                      ││ 14     Ok(())                                     ││  Mensaje de prueba número 24.           │
+│                      ││ 15 }                                              ││                                         │
+│                      ││ 16                                                ││  Mensaje de prueba número 25.           │
+│                      ││ 17 fn main() -> io::Result<()> {                  ││                                         │
+│                      ││ 18     let cfg = config::load()?;                 ││  Mensaje de prueba número 26.           │
+│                      ││ 19     session::run(cfg)                          ││                                         │
+│                      ││ 20 }                                              ││┌ Mensaje · Enter envía · Alt+Enter sal…┐│
+│                      ││~                                                  │││Escribe un mensaje…                    ││
+│                      ││~                                                  ││└───────────────────────────────────────┘│
+└──────────────────────┘└───────────────────────────────────────────────────┘└─────────────────────────────────────────┘
+┌ zsh ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│test config::tests::loads_defaults ... ok                                                                             │
+│test config::tests::rejects_unknown_agent ... ok                                                                      │
+│test session::tests::validates_names ... ok                                                                           │
+│test session::tests::resumes_task ... ok                                                                              │
+│                                                                                                                      │
+│test result: ok. 4 passed; 0 failed; 0 ignored                                                                        │
+│$                                                                                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Agente │ $0.42 │ ayuda: Alt+?

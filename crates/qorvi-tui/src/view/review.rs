@@ -1,6 +1,6 @@
 //! Vista de review: archivos cambiados a la izquierda, diff unificado a la derecha.
 
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
@@ -23,6 +23,21 @@ fn diff_line(l: &str, width: usize) -> Line<'static> {
         fg(Token::Text)
     };
     Line::styled(truncate(l, width), style)
+}
+
+/// Zonas de la vista de review dentro de `area`.
+pub struct ReviewAreas {
+    pub list: Rect,
+    pub diff: Rect,
+    pub footer: Rect,
+}
+
+pub fn areas(area: Rect) -> ReviewAreas {
+    let inner = area.inner(Margin::new(1, 1));
+    let [main, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+    let [list, diff] =
+        Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(65)]).areas(main);
+    ReviewAreas { list, diff, footer }
 }
 
 pub fn render(
@@ -48,12 +63,13 @@ pub fn render(
             ),
             bold(Token::Accent),
         ));
-    let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
-    let [main, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
-    let [list_area, diff_area] =
-        Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(65)]).areas(main);
+    let ReviewAreas {
+        list: list_area,
+        diff: diff_area,
+        footer,
+    } = areas(area);
 
     let list_block = Block::default()
         .borders(Borders::ALL)

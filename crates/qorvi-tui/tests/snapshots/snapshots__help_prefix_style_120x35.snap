@@ -29,7 +29,7 @@ expression: "snap(&s, 120, 35)"
 └──────────────────────┘└─│ j/k ↑/↓            explorador: mover la selección                │─────────────────────────┘
 ┌ zsh ────────────────────│ Enter/l h r        explorador: abrir · contraer/subir · refrescar│─────────────────────────┐
 │test config::tests::loads│                                                                  │                         │
-│test config::tests::rejec│                                                                  │                         │
+│test config::tests::rejec│ Ratón: clic para enfocar · rueda para desplazar                  │                         │
 │test session::tests::vali└──────────────────────────────────────────────────────────────────┘                         │
 │test session::tests::resumes_task ... ok                                                                              │
 │                                                                                                                      │

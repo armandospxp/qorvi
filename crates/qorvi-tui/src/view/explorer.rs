@@ -86,6 +86,11 @@ fn row_line(row: &Row, selected: bool, focused: bool, ascii: bool, width: usize)
     line
 }
 
+/// Primera fila visible: desplaza la ventana lo justo para que la seleccionada se vea.
+pub fn scroll_start(selected: usize, height: usize) -> usize {
+    (selected + 1).saturating_sub(height)
+}
+
 pub fn render(state: &AppState, frame: &mut Frame, area: Rect, focused: bool) {
     let block = pane_block(" Archivos ", focused, area.width);
     let inner = block.inner(area);
@@ -99,8 +104,7 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, focused: bool) {
     }
     let selected = task.explorer.selected.min(rows.len() - 1);
     let h = usize::from(inner.height);
-    // Desplaza la ventana lo justo para que la fila seleccionada quede a la vista.
-    let start = (selected + 1).saturating_sub(h);
+    let start = scroll_start(selected, h);
     let lines: Vec<Line> = rows
         .iter()
         .enumerate()

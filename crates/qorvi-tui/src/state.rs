@@ -111,6 +111,8 @@ pub struct Task {
     pub explorer: ExplorerState,
     /// Archivo abierto en el editor (simulado en la demo).
     pub editor_file: Option<String>,
+    /// Líneas del historial del chat por encima del final (0 = pegado al final).
+    pub chat_scroll: usize,
 }
 
 impl Task {
@@ -133,6 +135,7 @@ impl Task {
             files: Vec::new(),
             explorer: ExplorerState::default(),
             editor_file: None,
+            chat_scroll: 0,
         }
     }
 }
@@ -283,6 +286,9 @@ pub struct AppState {
     pub compact: bool,
     /// Lo fija el bucle de eventos: el explorador es visible por defecto en el tier completo.
     pub explorer_default: bool,
+    /// Lo fija el bucle de eventos: tamaño de la terminal (columnas, filas). `update`
+    /// lo necesita para saber qué hay bajo el ratón.
+    pub size: (u16, u16),
 }
 
 impl AppState {

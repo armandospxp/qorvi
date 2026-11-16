@@ -165,6 +165,11 @@ fn confirm(frame: &mut Frame, area: Rect, message: &str) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
+/// Rectángulo del diálogo de ayuda dentro de `area`.
+pub fn help_rect(area: Rect) -> Rect {
+    centered(area, 68, (HELP_GLOBAL.len() + HELP_FIXED.len()) as u16 + 6)
+}
+
 fn help(state: &AppState, frame: &mut Frame, area: Rect) {
     let style = state.shortcut_style;
     let rows: Vec<(String, &str)> = HELP_GLOBAL
@@ -172,7 +177,7 @@ fn help(state: &AppState, frame: &mut Frame, area: Rect) {
         .map(|(k, d)| (shortcut_label(style, k), *d))
         .chain(HELP_FIXED.iter().map(|(k, d)| (k.to_string(), *d)))
         .collect();
-    let rect = centered(area, 68, rows.len() as u16 + 6);
+    let rect = help_rect(area);
     if rect.width < 4 || rect.height < 3 {
         return;
     }
@@ -195,5 +200,10 @@ fn help(state: &AppState, frame: &mut Frame, area: Rect) {
             Span::styled(truncate(d, rest), fg(Token::Text)),
         ])
     }));
+    lines.push(Line::raw(""));
+    lines.push(Line::styled(
+        truncate(" Ratón: clic para enfocar · rueda para desplazar", w),
+        fg(Token::Muted),
+    ));
     frame.render_widget(Paragraph::new(lines), inner);
 }
