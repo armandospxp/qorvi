@@ -8,7 +8,8 @@ use ratatui::Frame;
 
 use super::{chat, explorer, fg, truncate};
 use crate::layout;
-use crate::state::{shortcut_label, AppState, Pane};
+use crate::shortcuts::shortcut_label;
+use crate::state::{AppState, Pane};
 use crate::theme::{color, status_label, status_symbol, Token};
 
 pub fn pane_block(title: &str, focused: bool, width: u16) -> Block<'static> {
@@ -111,7 +112,7 @@ pub fn render_minimized_terminal(state: &AppState, frame: &mut Frame, area: Rect
     let text = truncate(
         &format!(
             " ▸ Terminal (minimizada) · {} para desplegar",
-            shortcut_label(state.shortcut_style, "t")
+            shortcut_label(state.shortcut_style, state.direct_mod, "toggle_terminal")
         ),
         usize::from(area.width),
     );

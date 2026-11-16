@@ -36,4 +36,4 @@ expression: "snap(&s, 120, 35)"
 │test result: ok. 4 passed; 0 failed; 0 ignored                                                                        │
 │$                                                                                                                     │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: Alt+?
+ DEMO  │ APP-12 │ APP-12 │ ● trabajando │ foco: Archivos │ $0.42 │ ayuda: F1

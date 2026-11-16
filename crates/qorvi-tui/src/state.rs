@@ -2,6 +2,8 @@
 
 use std::collections::BTreeSet;
 
+use crossterm::event::KeyModifiers;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentStatus {
     Disconnected,
@@ -217,48 +219,14 @@ pub struct Toast {
 /// Ticks (250 ms) que vive un toast: unos 5 segundos.
 pub const TOAST_TTL_TICKS: u16 = 20;
 
-/// Forma de lanzar atajos que muestran la ayuda y las pistas. Las dos funcionan siempre.
+/// Forma de lanzar atajos que muestran la ayuda y las pistas. Todas las formas funcionan
+/// cuando la terminal envía la tecla (`Alt+tecla` también vale como prefijo).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShortcutStyle {
+    /// `Cmd`/`Ctrl` directos (`Cmd+B`).
+    Direct,
     /// `Ctrl+Space` y después la tecla.
     Prefix,
-    /// `Alt+tecla`.
-    Alt,
-}
-
-impl ShortcutStyle {
-    /// Por defecto, prefijo en macOS (Option no llega como Alt) y Alt en el resto.
-    pub fn os_default() -> Self {
-        if cfg!(target_os = "macos") {
-            ShortcutStyle::Prefix
-        } else {
-            ShortcutStyle::Alt
-        }
-    }
-
-    /// Interpreta `QORVI_KEYS` (`prefix` o `alt`); cualquier otro valor no cuenta.
-    pub fn from_env_value(value: &str) -> Option<Self> {
-        match value.to_ascii_lowercase().as_str() {
-            "prefix" => Some(ShortcutStyle::Prefix),
-            "alt" => Some(ShortcutStyle::Alt),
-            _ => None,
-        }
-    }
-
-    pub fn other(self) -> Self {
-        match self {
-            ShortcutStyle::Prefix => ShortcutStyle::Alt,
-            ShortcutStyle::Alt => ShortcutStyle::Prefix,
-        }
-    }
-}
-
-/// Texto de un atajo según la forma por defecto: `Ctrl+Space d` o `Alt+d`.
-pub fn shortcut_label(style: ShortcutStyle, key: &str) -> String {
-    match style {
-        ShortcutStyle::Prefix => format!("Ctrl+Space {key}"),
-        ShortcutStyle::Alt => format!("Alt+{key}"),
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -268,7 +236,7 @@ pub struct AppState {
     pub focus: Pane,
     pub zoom: bool,
     pub terminal_minimized: bool,
-    /// Alternancia del usuario sobre el valor por defecto del tier (Alt+e).
+    /// Alternancia del usuario sobre el valor por defecto del tier (atajo del explorador).
     pub explorer_toggled: bool,
     pub modal: Modal,
     pub toasts: Vec<Toast>,
@@ -279,6 +247,8 @@ pub struct AppState {
     pub ascii: bool,
     /// Qué forma de atajo muestran la ayuda y las pistas.
     pub shortcut_style: ShortcutStyle,
+    /// Modificador de los atajos directos: `SUPER` (Cmd) en macOS, `CONTROL` en el resto.
+    pub direct_mod: KeyModifiers,
     /// Se pulsó `Ctrl+Space` y falta la tecla del atajo.
     pub prefix_pending: bool,
     /// Lo fija el bucle de eventos según el tamaño de la terminal; `update` lo

@@ -36,4 +36,4 @@ expression: "snap(&s, 120, 35)"
 │test result: ok. 4 passed; 0 failed; 0 ignored                           ┌────────────────────────────────────────────┐
 │$                                                                        │[aviso] Tarea APP-13 esperando permiso      │
 └─────────────────────────────────────────────────────────────────────────└────────────────────────────────────────────┘
- DEMO  │ APP-13 │ APP-13 │ ⏳ permiso │ foco: Agente │ $0.18 │ ayuda: Alt+?
+ DEMO  │ APP-13 │ APP-13 │ ⏳ permiso │ foco: Agente │ $0.18 │ ayuda: F1
