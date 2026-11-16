@@ -13,3 +13,4 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Mockup navegable de la TUI con datos falsos (`qorvi --demo`), con explorador de archivos.
 - Atajos con tecla prefijo `Ctrl+Space` + tecla (por defecto en macOS) además de `Alt+tecla` (por defecto en Windows/Linux); `Ctrl+Space q` sale siempre.
 - Ratón en la TUI: clic para enfocar paneles, cambiar de tarea, usar el explorador y elegir opciones de permiso; rueda para desplazar el chat y el explorador.
+- Atajos directos `Cmd` (macOS) / `Ctrl` (Windows/Linux) con detección automática del protocolo de teclado kitty; `qorvi doctor keys` diagnostica la terminal y da la config para liberar atajos en Ghostty.
