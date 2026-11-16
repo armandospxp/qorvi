@@ -1,4 +1,4 @@
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyEvent, MouseEvent};
 
 use crate::state::AgentStatus;
 
@@ -27,6 +27,7 @@ pub enum Action {
     PrefixUnknown(String),
     DemoSetStatus(AgentStatus),
     Key(KeyEvent),
+    Mouse(MouseEvent),
     Tick,
     Resize,
 }

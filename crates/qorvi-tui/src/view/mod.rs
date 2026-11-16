@@ -15,6 +15,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, Wrap};
 use ratatui::Frame;
 
+use crate::layout;
 use crate::state::{AppState, Modal, Pane};
 use crate::theme::{color, Token};
 
@@ -169,16 +170,16 @@ pub fn view(state: &AppState, frame: &mut Frame) {
         return;
     }
 
-    let [bar, body, status] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ])
-    .areas(area);
-
-    taskbar::render(state, frame, bar);
-    render_body(state, frame, body, tier);
-    statusbar::render(state, frame, status, is_small(area.width, area.height));
+    let areas = layout::compute(area, state);
+    taskbar::render(state, frame, &areas);
+    render_body(state, frame, &areas);
+    statusbar::render(
+        state,
+        frame,
+        areas.statusbar,
+        is_small(area.width, area.height),
+    );
+    let body = areas.body;
     if let Modal::Review { files, selected } = &state.modal {
         review::render(state, frame, body, files, *selected);
     } else if state.modal != Modal::None {
@@ -207,49 +208,15 @@ fn render_too_small(frame: &mut Frame, area: Rect) {
     );
 }
 
-fn render_body(state: &AppState, frame: &mut Frame, body: Rect, tier: Tier) {
-    if state.zoom {
-        panes::render_pane(state, frame, body, state.focus);
-        return;
-    }
-    if tier == Tier::Compact {
-        let [tabs, pane] =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(body);
+fn render_body(state: &AppState, frame: &mut Frame, areas: &layout::Areas) {
+    if let Some(tabs) = areas.tabs_bar {
         panes::render_tabs(state, frame, tabs);
-        panes::render_pane(state, frame, pane, state.focus);
-        return;
     }
-
-    let minimized = (tier == Tier::Medium) ^ state.terminal_minimized;
-    let term_h = if minimized {
-        1
-    } else {
-        (body.height * 30 / 100).max(6)
-    };
-    let term_h = term_h.min(body.height.saturating_sub(4)).max(1);
-    let [top, term] =
-        Layout::vertical([Constraint::Min(0), Constraint::Length(term_h)]).areas(body);
-    // Como la terminal: el valor por defecto depende del tier y Alt+e lo invierte.
-    let show_explorer = (tier == Tier::Full) ^ state.explorer_toggled;
-    let (explorer, rest) = if show_explorer {
-        // 20 % del ancho, entre 20 y 32 columnas (sin pasar de la mitad).
-        let w = (top.width / 5).clamp(20, 32).min(top.width / 2);
-        let [explorer, rest] =
-            Layout::horizontal([Constraint::Length(w), Constraint::Min(0)]).areas(top);
-        (Some(explorer), rest)
-    } else {
-        (None, top)
-    };
-    let [editor, agent] =
-        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(rest);
-    if let Some(explorer) = explorer {
-        panes::render_pane(state, frame, explorer, Pane::Explorer);
-    }
-    panes::render_pane(state, frame, editor, Pane::Editor);
-    panes::render_pane(state, frame, agent, Pane::Agent);
-    if minimized {
-        panes::render_minimized_terminal(state, frame, term);
-    } else {
-        panes::render_pane(state, frame, term, Pane::Terminal);
+    for (pane, rect) in areas.panes() {
+        if pane == Pane::Terminal && areas.terminal_minimized {
+            panes::render_minimized_terminal(state, frame, rect);
+        } else {
+            panes::render_pane(state, frame, rect, pane);
+        }
     }
 }

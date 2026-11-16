@@ -1,11 +1,17 @@
 //! `update`: transforma el estado según una acción. No hace IO.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::{Position, Rect};
 
 use crate::action::Action;
 use crate::demo::fake_changes;
 use crate::explorer::{visible_rows, RowKind};
+use crate::layout::{self, Areas};
 use crate::state::{AgentStatus, AppState, ChatItem, ConfirmAction, Modal, Pane, Task, ToastLevel};
+use crate::view::{chat, explorer as explorer_view, modals, review, Tier};
+
+/// Líneas que desplaza una muesca de la rueda en el historial del chat.
+const WHEEL_LINES: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
@@ -50,6 +56,7 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
         }
         Action::DemoSetStatus(status) => set_status(state, status),
         Action::Key(key) => handle_key(state, key),
+        Action::Mouse(mouse) => handle_mouse(state, mouse),
         // El resto de acciones de navegación no actúan con un diálogo abierto.
         _ if modal_open => {}
         Action::FocusLeft => focus_horizontal(state, false),
@@ -317,6 +324,7 @@ fn agent_key(state: &mut AppState, key: KeyEvent) {
                 }
             } else if !task.input.trim().is_empty() {
                 let text = std::mem::take(&mut task.input);
+                task.chat_scroll = 0;
                 task.chat.push(ChatItem::User(text));
                 task.chat
                     .push(ChatItem::Agent("DEMO: respuesta simulada.".to_string()));
@@ -324,8 +332,178 @@ fn agent_key(state: &mut AppState, key: KeyEvent) {
         }
         KeyCode::Backspace => {
             task.input.pop();
+            task.chat_scroll = 0;
         }
-        KeyCode::Char(c) if is_text_modifier(key.modifiers) => task.input.push(c),
+        KeyCode::Char(c) if is_text_modifier(key.modifiers) => {
+            task.input.push(c);
+            task.chat_scroll = 0;
+        }
+        _ => {}
+    }
+}
+
+fn handle_mouse(state: &mut AppState, mouse: MouseEvent) {
+    let areas = layout::compute(Rect::new(0, 0, state.size.0, state.size.1), state);
+    if areas.tier == Tier::TooSmall {
+        return;
+    }
+    let pos = Position::new(mouse.column, mouse.row);
+    match state.modal {
+        Modal::None => match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => click(state, &areas, pos),
+            MouseEventKind::ScrollUp => wheel(state, &areas, pos, true),
+            MouseEventKind::ScrollDown => wheel(state, &areas, pos, false),
+            _ => {}
+        },
+        // Un clic fuera del diálogo lo cierra; NewTask y Confirm no, para no perder lo escrito.
+        Modal::Help => {
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+                && !modals::help_rect(areas.body).contains(pos)
+            {
+                state.modal = Modal::None;
+            }
+        }
+        Modal::Review { .. } => review_mouse(state, &areas, mouse.kind, pos),
+        Modal::NewTask { .. } | Modal::Confirm { .. } => {}
+    }
+}
+
+fn click(state: &mut AppState, areas: &Areas, pos: Position) {
+    if let Some(tab) = areas.task_tabs.iter().find(|t| t.rect.contains(pos)) {
+        select_task(state, tab.index);
+        return;
+    }
+    if let Some((_, pane)) = areas.compact_tabs.iter().find(|(r, _)| r.contains(pos)) {
+        state.focus = *pane;
+        return;
+    }
+    let Some((pane, rect)) = areas.pane_at(pos.x, pos.y) else {
+        return;
+    };
+    state.focus = pane;
+    match pane {
+        Pane::Explorer => click_explorer(state, rect, pos),
+        Pane::Agent => click_agent(state, rect, pos),
+        // Editor y terminal: en la app real el clic llegará al PTY.
+        Pane::Editor | Pane::Terminal => {}
+    }
+}
+
+fn click_explorer(state: &mut AppState, rect: Rect, pos: Position) {
+    let inner = layout::inner(rect);
+    if !inner.contains(pos) {
+        return;
+    }
+    let Some(task) = state.active_task_mut() else {
+        return;
+    };
+    let rows = visible_rows(&task.files, &task.explorer.expanded);
+    if rows.is_empty() {
+        return;
+    }
+    let selected = task.explorer.selected.min(rows.len() - 1);
+    let start = explorer_view::scroll_start(selected, usize::from(inner.height));
+    let idx = start + usize::from(pos.y - inner.y);
+    if idx >= rows.len() {
+        return;
+    }
+    task.explorer.selected = idx;
+    if idx == selected {
+        // Segundo clic sobre la fila seleccionada: como Enter.
+        explorer_key(state, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    }
+}
+
+fn click_agent(state: &mut AppState, rect: Rect, pos: Position) {
+    let Some(task) = state.active_task() else {
+        return;
+    };
+    let view = chat::chat_view(task, layout::inner(rect), state.ascii);
+    let Some(option) = view
+        .options
+        .iter()
+        .find(|(r, _)| r.contains(pos))
+        .map(|(_, i)| *i)
+    else {
+        return;
+    };
+    let Some(idx) = last_unresolved_permission(task) else {
+        return;
+    };
+    let Some(task) = state.active_task_mut() else {
+        return;
+    };
+    let Some(ChatItem::Permission { selected, .. }) = task.chat.get_mut(idx) else {
+        return;
+    };
+    if *selected == option {
+        agent_key(state, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    } else {
+        *selected = option;
+    }
+}
+
+fn wheel(state: &mut AppState, areas: &Areas, pos: Position, up: bool) {
+    let Some((pane, rect)) = areas.pane_at(pos.x, pos.y) else {
+        return;
+    };
+    let ascii = state.ascii;
+    let Some(task) = state.active_task_mut() else {
+        return;
+    };
+    match pane {
+        Pane::Explorer => {
+            let n = visible_rows(&task.files, &task.explorer.expanded).len();
+            if n > 0 {
+                let ex = &mut task.explorer;
+                let cur = ex.selected.min(n - 1);
+                ex.selected = if up {
+                    cur.saturating_sub(1)
+                } else {
+                    (cur + 1).min(n - 1)
+                };
+            }
+        }
+        Pane::Agent => {
+            let max = chat::chat_view(task, layout::inner(rect), ascii).max_scroll;
+            let cur = task.chat_scroll.min(max);
+            task.chat_scroll = if up {
+                (cur + WHEEL_LINES).min(max)
+            } else {
+                cur.saturating_sub(WHEEL_LINES)
+            };
+        }
+        // Editor y terminal: en la app real la rueda llegará al PTY.
+        Pane::Editor | Pane::Terminal => {}
+    }
+}
+
+fn review_mouse(state: &mut AppState, areas: &Areas, kind: MouseEventKind, pos: Position) {
+    let zones = review::areas(areas.body);
+    let Modal::Review { files, selected } = &mut state.modal else {
+        return;
+    };
+    match kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if !areas.body.contains(pos) {
+                state.modal = Modal::None;
+                return;
+            }
+            let list = layout::inner(zones.list);
+            if list.contains(pos) {
+                let idx = usize::from(pos.y - list.y);
+                if idx < files.len() {
+                    *selected = idx;
+                }
+            }
+        }
+        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown if zones.list.contains(pos) => {
+            if kind == MouseEventKind::ScrollUp {
+                *selected = selected.saturating_sub(1);
+            } else if *selected + 1 < files.len() {
+                *selected += 1;
+            }
+        }
         _ => {}
     }
 }
@@ -1099,5 +1277,481 @@ mod tests {
             Some(ShortcutStyle::Alt)
         );
         assert_eq!(ShortcutStyle::from_env_value("x"), None);
+    }
+}
+
+#[cfg(test)]
+mod mouse_tests {
+    use super::*;
+    use crate::demo::demo_state;
+    use crate::view;
+
+    fn sized(w: u16, h: u16) -> AppState {
+        let mut s = demo_state();
+        s.size = (w, h);
+        let tier = view::tier(w, h);
+        s.set_layout(tier == Tier::Compact, tier == Tier::Full);
+        s
+    }
+
+    fn areas(s: &AppState) -> Areas {
+        layout::compute(Rect::new(0, 0, s.size.0, s.size.1), s)
+    }
+
+    fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Action {
+        Action::Mouse(MouseEvent {
+            kind,
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    fn click(s: &mut AppState, x: u16, y: u16) {
+        update(s, mouse(MouseEventKind::Down(MouseButton::Left), x, y));
+    }
+
+    fn wheel_at(s: &mut AppState, x: u16, y: u16, up: bool) {
+        let kind = if up {
+            MouseEventKind::ScrollUp
+        } else {
+            MouseEventKind::ScrollDown
+        };
+        update(s, mouse(kind, x, y));
+    }
+
+    fn center(r: Rect) -> (u16, u16) {
+        (r.x + r.width / 2, r.y + r.height / 2)
+    }
+
+    fn chat_of(n: usize) -> Vec<ChatItem> {
+        (0..n)
+            .map(|i| ChatItem::Agent(format!("mensaje {i}")))
+            .collect()
+    }
+
+    #[test]
+    fn click_on_each_pane_focuses_it() {
+        let mut s = sized(120, 35);
+        let a = areas(&s);
+        assert_eq!(a.panes().len(), 4);
+        for (pane, rect) in a.panes() {
+            // Borde superior: no cae sobre ninguna fila del explorador ni opción de permiso.
+            s.focus = if pane == Pane::Editor {
+                Pane::Agent
+            } else {
+                Pane::Editor
+            };
+            click(&mut s, rect.x + 1, rect.y);
+            assert_eq!(s.focus, pane);
+        }
+        // Centro de los paneles que no tienen filas clicables.
+        for pane in [Pane::Editor, Pane::Terminal, Pane::Agent] {
+            s.focus = Pane::Explorer;
+            let rect = a
+                .panes()
+                .into_iter()
+                .find(|(p, _)| *p == pane)
+                .expect("panel")
+                .1;
+            let (x, y) = center(rect);
+            click(&mut s, x, y);
+            assert_eq!(s.focus, pane);
+        }
+    }
+
+    #[test]
+    fn click_on_minimized_terminal_focuses_it() {
+        let mut s = sized(100, 30);
+        let a = areas(&s);
+        assert!(a.terminal_minimized);
+        let (x, y) = center(a.terminal.expect("terminal"));
+        click(&mut s, x, y);
+        assert_eq!(s.focus, Pane::Terminal);
+    }
+
+    #[test]
+    fn click_on_zoomed_pane_keeps_focus() {
+        let mut s = sized(120, 35);
+        s.zoom = true;
+        s.focus = Pane::Terminal;
+        let a = areas(&s);
+        assert_eq!(a.panes().len(), 1);
+        let (x, y) = center(a.body);
+        click(&mut s, x, y);
+        assert_eq!(s.focus, Pane::Terminal);
+    }
+
+    #[test]
+    fn click_on_task_selects_it_and_clears_done() {
+        let mut s = sized(120, 35);
+        s.tasks[2].status = AgentStatus::Done;
+        let a = areas(&s);
+        assert_eq!(a.task_tabs.len(), 3);
+        let (x, y) = center(a.task_tabs[1].rect);
+        click(&mut s, x, y);
+        assert_eq!(s.active, 1);
+        let (x, y) = center(a.task_tabs[2].rect);
+        click(&mut s, x, y);
+        assert_eq!(s.active, 2);
+        assert_eq!(s.tasks[2].status, AgentStatus::Idle);
+        // Los huecos entre tareas no hacen nada.
+        let gap = a.task_tabs[0].rect.right();
+        click(&mut s, gap, 0);
+        assert_eq!(s.active, 2);
+    }
+
+    #[test]
+    fn compact_tab_clicks_focus_each_pane() {
+        let mut s = sized(80, 24);
+        assert!(s.compact);
+        let a = areas(&s);
+        assert_eq!(a.compact_tabs.len(), 4);
+        for (rect, pane) in a.compact_tabs.clone() {
+            let (x, y) = center(rect);
+            click(&mut s, x, y);
+            assert_eq!(s.focus, pane);
+        }
+        // Estrecho (< 48 columnas): pestañas sin holgura.
+        let mut s = sized(44, 12);
+        let a = areas(&s);
+        assert_eq!(a.compact_tabs.len(), 4);
+        let (rect, pane) = a.compact_tabs[3];
+        click(&mut s, rect.x, rect.y);
+        assert_eq!(s.focus, pane);
+    }
+
+    #[test]
+    fn compact_body_click_focuses_the_visible_pane() {
+        let mut s = sized(80, 24);
+        s.focus = Pane::Editor;
+        let a = areas(&s);
+        assert!(a.agent.is_none() && a.explorer.is_none() && a.terminal.is_none());
+        let (x, y) = center(a.editor.expect("editor"));
+        click(&mut s, x, y);
+        assert_eq!(s.focus, Pane::Editor);
+    }
+
+    fn explorer_inner_and_start(s: &AppState) -> (Rect, usize) {
+        let inner = layout::inner(areas(s).explorer.expect("explorador"));
+        let task = s.active_task().expect("tarea");
+        let rows = visible_rows(&task.files, &task.explorer.expanded);
+        let sel = task.explorer.selected.min(rows.len() - 1);
+        (
+            inner,
+            explorer_view::scroll_start(sel, usize::from(inner.height)),
+        )
+    }
+
+    fn rows_of(s: &AppState) -> Vec<crate::explorer::Row> {
+        let t = s.active_task().expect("tarea");
+        visible_rows(&t.files, &t.explorer.expanded)
+    }
+
+    #[test]
+    fn explorer_click_selects_then_activates_dir() {
+        let mut s = sized(120, 35);
+        s.focus = Pane::Editor;
+        let (inner, start) = explorer_inner_and_start(&s);
+        let rows = rows_of(&s);
+        let dir = rows.iter().position(|r| r.is_dir()).expect("carpeta");
+        let path = rows[dir].path.clone();
+        let y = inner.y + (dir - start) as u16;
+        let was_expanded = s.tasks[0].explorer.expanded.contains(&path);
+        click(&mut s, inner.x + 2, y);
+        assert_eq!(s.focus, Pane::Explorer);
+        assert_eq!(s.tasks[0].explorer.selected, dir);
+        assert_eq!(s.tasks[0].explorer.expanded.contains(&path), was_expanded);
+        click(&mut s, inner.x + 2, y);
+        assert_eq!(s.tasks[0].explorer.expanded.contains(&path), !was_expanded);
+        assert_eq!(s.focus, Pane::Explorer);
+    }
+
+    #[test]
+    fn explorer_click_on_file_opens_it_like_enter() {
+        let mut s = sized(120, 35);
+        let (inner, start) = explorer_inner_and_start(&s);
+        let rows = rows_of(&s);
+        let file = rows.iter().rposition(|r| !r.is_dir()).expect("archivo");
+        let y = inner.y + (file - start) as u16;
+        click(&mut s, inner.x + 2, y);
+        assert_eq!(s.focus, Pane::Explorer);
+        click(&mut s, inner.x + 2, y);
+        assert_eq!(s.focus, Pane::Editor);
+        assert_eq!(
+            s.tasks[0].editor_file.as_deref(),
+            Some(rows[file].path.as_str())
+        );
+        assert!(s
+            .toasts
+            .iter()
+            .any(|t| t.text.starts_with("DEMO: se abriría")));
+    }
+
+    #[test]
+    fn explorer_click_below_last_row_only_focuses() {
+        let mut s = sized(120, 35);
+        s.focus = Pane::Editor;
+        let before = s.tasks[0].explorer.clone();
+        let inner = layout::inner(areas(&s).explorer.expect("explorador"));
+        assert!(rows_of(&s).len() < usize::from(inner.height));
+        click(&mut s, inner.x + 1, inner.bottom() - 1);
+        assert_eq!(s.focus, Pane::Explorer);
+        assert_eq!(s.tasks[0].explorer, before);
+    }
+
+    #[test]
+    fn explorer_wheel_moves_selection_and_clamps() {
+        let mut s = sized(120, 35);
+        let (x, y) = center(areas(&s).explorer.expect("explorador"));
+        let start = s.tasks[0].explorer.selected;
+        wheel_at(&mut s, x, y, false);
+        assert_eq!(s.tasks[0].explorer.selected, start + 1);
+        wheel_at(&mut s, x, y, true);
+        wheel_at(&mut s, x, y, true);
+        assert_eq!(s.tasks[0].explorer.selected, start.saturating_sub(1));
+        for _ in 0..50 {
+            wheel_at(&mut s, x, y, true);
+        }
+        assert_eq!(s.tasks[0].explorer.selected, 0);
+        for _ in 0..500 {
+            wheel_at(&mut s, x, y, false);
+        }
+        assert_eq!(s.tasks[0].explorer.selected, rows_of(&s).len() - 1);
+    }
+
+    fn with_permission() -> AppState {
+        let mut s = sized(120, 35);
+        update(&mut s, Action::DemoSetStatus(AgentStatus::NeedsPermission));
+        s
+    }
+
+    fn chat_view_of(s: &AppState) -> chat::ChatView {
+        let rect = areas(s).agent.expect("agente");
+        chat::chat_view(
+            s.active_task().expect("tarea"),
+            layout::inner(rect),
+            s.ascii,
+        )
+    }
+
+    #[test]
+    fn permission_option_click_selects_then_resolves() {
+        let mut s = with_permission();
+        s.focus = Pane::Editor;
+        let r = chat_view_of(&s)
+            .options
+            .iter()
+            .find(|(_, i)| *i == 2)
+            .map(|(r, _)| *r)
+            .expect("opción visible");
+        click(&mut s, r.x + 4, r.y);
+        assert_eq!(s.focus, Pane::Agent);
+        let perm = |s: &AppState| match s.tasks[0].chat.last() {
+            Some(ChatItem::Permission {
+                selected, resolved, ..
+            }) => (*selected, *resolved),
+            other => panic!("se esperaba un permiso, hay {other:?}"),
+        };
+        assert_eq!(perm(&s), (2, None));
+        click(&mut s, r.x + 4, r.y);
+        assert_eq!(perm(&s), (2, Some(2)));
+        assert_eq!(s.tasks[0].status, AgentStatus::Working);
+        assert!(s
+            .toasts
+            .iter()
+            .any(|t| t.text == "Permiso respondido: Rechazar"));
+    }
+
+    #[test]
+    fn click_on_agent_input_only_focuses() {
+        let mut s = with_permission();
+        s.focus = Pane::Editor;
+        let (x, y) = center(chat_view_of(&s).input);
+        click(&mut s, x, y);
+        assert_eq!(s.focus, Pane::Agent);
+        assert!(matches!(
+            s.tasks[0].chat.last(),
+            Some(ChatItem::Permission {
+                resolved: None,
+                selected: 0,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn chat_wheel_scrolls_by_three_clamps_and_resets_on_typing() {
+        let mut s = sized(120, 35);
+        s.tasks[0].chat.extend(chat_of(40));
+        let (x, y) = center(areas(&s).agent.expect("agente"));
+        wheel_at(&mut s, x, y, true);
+        assert_eq!(s.tasks[0].chat_scroll, 3);
+        wheel_at(&mut s, x, y, true);
+        assert_eq!(s.tasks[0].chat_scroll, 6);
+        wheel_at(&mut s, x, y, false);
+        assert_eq!(s.tasks[0].chat_scroll, 3);
+        let max = chat_view_of(&s).max_scroll;
+        assert!(max > 6);
+        for _ in 0..200 {
+            wheel_at(&mut s, x, y, true);
+        }
+        assert_eq!(s.tasks[0].chat_scroll, max);
+        for _ in 0..200 {
+            wheel_at(&mut s, x, y, false);
+        }
+        assert_eq!(s.tasks[0].chat_scroll, 0);
+        wheel_at(&mut s, x, y, true);
+        s.focus = Pane::Agent;
+        press(&mut s, KeyCode::Char('a'));
+        assert_eq!(s.tasks[0].chat_scroll, 0);
+        wheel_at(&mut s, x, y, true);
+        press(&mut s, KeyCode::Enter);
+        assert_eq!(s.tasks[0].chat_scroll, 0);
+    }
+
+    fn press(s: &mut AppState, code: KeyCode) {
+        update(s, Action::Key(KeyEvent::new(code, KeyModifiers::NONE)));
+    }
+
+    #[test]
+    fn options_scrolled_out_of_view_are_not_clickable() {
+        let mut s = with_permission();
+        assert_eq!(chat_view_of(&s).options.len(), 3);
+        s.tasks[0].chat.extend(chat_of(60));
+        assert!(chat_view_of(&s).options.is_empty());
+    }
+
+    #[test]
+    fn wheel_over_editor_and_terminal_is_ignored() {
+        let mut s = sized(120, 35);
+        let before = s.clone();
+        let a = areas(&s);
+        for rect in [a.editor, a.terminal].into_iter().flatten() {
+            let (x, y) = center(rect);
+            wheel_at(&mut s, x, y, true);
+            wheel_at(&mut s, x, y, false);
+        }
+        assert_eq!(s, before);
+    }
+
+    #[test]
+    fn help_closes_on_outside_click_only() {
+        let mut s = sized(120, 35);
+        s.modal = Modal::Help;
+        let a = areas(&s);
+        let rect = modals::help_rect(a.body);
+        let (x, y) = center(rect);
+        click(&mut s, x, y);
+        assert_eq!(s.modal, Modal::Help);
+        click(&mut s, rect.x, rect.y);
+        assert_eq!(s.modal, Modal::Help);
+        // Fuera del diálogo (sobre el explorador): cierra sin cambiar el foco.
+        click(&mut s, 0, a.body.y);
+        assert_eq!(s.modal, Modal::None);
+        assert_eq!(s.focus, Pane::Agent);
+    }
+
+    #[test]
+    fn new_task_and_confirm_ignore_the_mouse() {
+        for modal in [
+            Modal::NewTask {
+                name: "abc".to_string(),
+                agent_idx: 0,
+                base: "main".to_string(),
+                field: 0,
+            },
+            Modal::Confirm {
+                message: "¿?".to_string(),
+                action: ConfirmAction::DiscardTask(0),
+            },
+        ] {
+            let mut s = sized(120, 35);
+            s.modal = modal;
+            let before = s.clone();
+            click(&mut s, 0, 0);
+            click(&mut s, 5, 0);
+            click(&mut s, 60, 17);
+            wheel_at(&mut s, 60, 17, true);
+            assert_eq!(s, before);
+        }
+    }
+
+    #[test]
+    fn review_click_selects_file_and_outside_closes() {
+        let mut s = sized(120, 35);
+        s.modal = Modal::Review {
+            files: fake_changes(),
+            selected: 0,
+        };
+        let a = areas(&s);
+        let zones = review::areas(a.body);
+        let list = layout::inner(zones.list);
+        click(&mut s, list.x + 1, list.y + 2);
+        assert!(matches!(s.modal, Modal::Review { selected: 2, .. }));
+        // Debajo del último archivo no cambia nada.
+        click(&mut s, list.x + 1, list.y + 10);
+        assert!(matches!(s.modal, Modal::Review { selected: 2, .. }));
+        // El diff no selecciona.
+        click(&mut s, zones.diff.x + 3, zones.diff.y + 3);
+        assert!(matches!(s.modal, Modal::Review { selected: 2, .. }));
+        wheel_at(&mut s, list.x + 1, list.y, true);
+        assert!(matches!(s.modal, Modal::Review { selected: 1, .. }));
+        for _ in 0..10 {
+            wheel_at(&mut s, list.x + 1, list.y, false);
+        }
+        assert!(matches!(s.modal, Modal::Review { selected: 2, .. }));
+        click(&mut s, 0, a.taskbar.y);
+        assert_eq!(s.modal, Modal::None);
+    }
+
+    #[test]
+    fn modal_blocks_clicks_on_tasks() {
+        let mut s = sized(120, 35);
+        s.modal = Modal::Help;
+        let (x, y) = center(areas(&s).task_tabs[1].rect);
+        click(&mut s, x, y);
+        // Cierra la ayuda (clic fuera) pero no cambia de tarea.
+        assert_eq!(s.modal, Modal::None);
+        assert_eq!(s.active, 0);
+    }
+
+    #[test]
+    fn clicks_far_outside_or_on_tiny_screens_change_nothing() {
+        let mut s = sized(120, 35);
+        let before = s.clone();
+        click(&mut s, 999, 999);
+        click(&mut s, u16::MAX, u16::MAX);
+        wheel_at(&mut s, 999, 999, true);
+        assert_eq!(s, before);
+
+        let mut s = sized(10, 5);
+        let before = s.clone();
+        click(&mut s, 0, 0);
+        click(&mut s, 5, 2);
+        wheel_at(&mut s, 5, 2, true);
+        assert_eq!(s, before);
+
+        // Sin tamaño todavía (antes del primer dibujo).
+        let mut s = demo_state();
+        let before = s.clone();
+        click(&mut s, 0, 0);
+        assert_eq!(s, before);
+    }
+
+    #[test]
+    fn moves_releases_and_other_buttons_do_nothing() {
+        let mut s = sized(120, 35);
+        let before = s.clone();
+        let (x, y) = center(areas(&s).editor.expect("editor"));
+        for kind in [
+            MouseEventKind::Moved,
+            MouseEventKind::Up(MouseButton::Left),
+            MouseEventKind::Down(MouseButton::Right),
+            MouseEventKind::ScrollLeft,
+        ] {
+            update(&mut s, mouse(kind, x, y));
+        }
+        assert_eq!(s, before);
     }
 }

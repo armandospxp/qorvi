@@ -272,5 +272,6 @@ pub fn demo_state() -> AppState {
         prefix_pending: false,
         compact: false,
         explorer_default: true,
+        size: (0, 0),
     }
 }

@@ -7,6 +7,7 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 use super::{chat, explorer, fg, truncate};
+use crate::layout;
 use crate::state::{shortcut_label, AppState, Pane};
 use crate::theme::{color, status_label, status_symbol, Token};
 
@@ -121,18 +122,14 @@ pub fn render_tabs(state: &AppState, frame: &mut Frame, area: Rect) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    // Por debajo de 48 columnas no caben las cuatro pestañas con holgura.
-    let tight = area.width < 48;
-    let mut spans = vec![Span::raw(if tight { "" } else { " " })];
+    let (lead, sep, tight) = layout::tab_chrome(area.width);
+    let mut spans = vec![Span::raw(lead)];
     for (i, pane) in [Pane::Explorer, Pane::Editor, Pane::Agent, Pane::Terminal]
         .into_iter()
         .enumerate()
     {
         if i > 0 {
-            spans.push(Span::styled(
-                if tight { "|" } else { " | " },
-                fg(Token::Border),
-            ));
+            spans.push(Span::styled(sep, fg(Token::Border)));
         }
         let style = if pane == state.focus {
             Style::default()
@@ -142,12 +139,7 @@ pub fn render_tabs(state: &AppState, frame: &mut Frame, area: Rect) {
         } else {
             fg(Token::Muted)
         };
-        let label = if tight {
-            pane.label().to_string()
-        } else {
-            format!(" {} ", pane.label())
-        };
-        spans.push(Span::styled(label, style));
+        spans.push(Span::styled(layout::tab_label(pane, tight), style));
     }
     if let Some(task) = state.active_task() {
         spans.push(Span::styled(
