@@ -11,9 +11,11 @@ use std::process::{Command, Output, Stdio};
 use crate::error::{Error, Result};
 
 mod branch;
+mod diff;
 mod status;
 mod worktree;
 
+pub use diff::{ChangeKind, FileChange};
 pub use status::{FileState, FileStatus};
 pub use worktree::WorktreeInfo;
 
