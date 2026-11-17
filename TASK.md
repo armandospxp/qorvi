@@ -34,8 +34,8 @@ _Última actualización: 2026-11-16_
 - [x] Rutas y configuración · Sonnet
 - [x] Tareas y persistencia atómica · Sonnet
 - [x] Git: worktrees, ramas y estado · Sonnet
-- [ ] Git: cambios, diff por archivo y lista de archivos · Sonnet
-- [ ] Git: commit, merge, push, PR y borrado · Sonnet
+- [x] Git: cambios, diff por archivo y lista de archivos · Sonnet
+- [x] Git: commit, merge, push, PR y borrado · Sonnet
 - [x] `Workspace`: crear y borrar tareas, worktrees huérfanos · Opus
 - [ ] CLI `qorvi new`, `qorvi ls`, `qorvi rm` · Sonnet
 - [ ] README y CHANGELOG · Haiku

@@ -11,13 +11,17 @@ use std::process::{Command, Output, Stdio};
 use crate::error::{Error, Result};
 
 mod branch;
+mod commit;
 mod diff;
+mod merge;
+mod remote;
 mod status;
 mod worktree;
 
 #[cfg(test)]
 pub(crate) use branch::testutil;
 pub use diff::{ChangeKind, FileChange};
+pub use merge::MergeStyle;
 pub use status::{FileState, FileStatus};
 pub use worktree::WorktreeInfo;
 
@@ -92,6 +96,28 @@ impl Git {
         to_git_output(args, out)
     }
 
+    /// Como [`Git::run`], pero pasa `input` por stdin (útil para mensajes con `-F -`).
+    pub fn run_with_stdin<I, S>(&self, args: I, input: &str) -> Result<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let args: Vec<_> = args.into_iter().collect();
+        let out = self.output_with_stdin(&args, input)?;
+        if out.success() {
+            Ok(out.stdout)
+        } else {
+            Err(failed(&args, &out))
+        }
+    }
+
+    /// Como [`Git::output`], pero pasa `input` por stdin.
+    pub fn output_with_stdin<S: AsRef<OsStr>>(&self, args: &[S], input: &str) -> Result<GitOutput> {
+        let mut cmd = self.command(args);
+        let out = output_with_stdin(&mut cmd, input).map_err(|e| spawn_error(args, e))?;
+        to_git_output(args, out)
+    }
+
     /// Construye el `Command` con el entorno estándar de qorvi.
     fn command<S: AsRef<OsStr>>(&self, args: &[S]) -> Command {
         let mut cmd = Command::new("git");
@@ -118,6 +144,26 @@ impl Git {
         }
         cmd
     }
+}
+
+/// Lanza `cmd` escribiendo `input` por stdin (desde un hilo, para no bloquearse con salidas
+/// grandes) y espera a que termine.
+pub(crate) fn output_with_stdin(cmd: &mut Command, input: &str) -> std::io::Result<Output> {
+    use std::io::Write;
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut stdin = child.stdin.take().expect("stdin entubado");
+    let data = input.as_bytes().to_vec();
+    let writer = std::thread::spawn(move || {
+        // Si el proceso termina sin leer todo, el error de tubería se ignora a propósito.
+        let _ = stdin.write_all(&data);
+    });
+    let out = child.wait_with_output();
+    let _ = writer.join();
+    out
 }
 
 fn display_args<S: AsRef<OsStr>>(args: &[S]) -> String {
@@ -205,6 +251,15 @@ mod tests {
             .output(&["rev-parse", "--verify", "--quiet", "HEAD"])
             .unwrap();
         assert!(!out.success());
+    }
+
+    #[test]
+    fn run_with_stdin_pasa_la_entrada() {
+        let dir = init_repo();
+        let out = Git::new(dir.path())
+            .run_with_stdin(["hash-object", "--stdin"], "hola\n")
+            .unwrap();
+        assert_eq!(out.trim().len(), 40);
     }
 
     #[test]

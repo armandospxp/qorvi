@@ -109,6 +109,70 @@ pub enum Error {
     #[error("no se pudo deducir la rama de partida (HEAD separado); indícala con --base")]
     NoBaseBranch,
 
+    /// No hay cambios que confirmar.
+    #[error("no hay cambios que confirmar")]
+    NothingToCommit,
+
+    /// El mensaje de commit o de merge está vacío.
+    #[error("el mensaje no puede estar vacío")]
+    EmptyMessage,
+
+    /// Git no tiene identidad de usuario configurada.
+    #[error("git no tiene identidad configurada; ejecuta `git config --global user.name \"Tu Nombre\"` y `git config --global user.email tu@correo`")]
+    GitIdentityMissing,
+
+    /// `HEAD` está separado y la operación necesita una rama.
+    #[error("HEAD está separado; cambia a una rama antes de continuar")]
+    DetachedHead,
+
+    /// El árbol de trabajo tiene cambios sin confirmar.
+    #[error("{} tiene cambios sin confirmar; confírmalos o descártalos antes de continuar", .0.display())]
+    DirtyWorktree(PathBuf),
+
+    /// No existe la rama pedida.
+    #[error("no existe la rama `{0}`")]
+    BranchNotFound(String),
+
+    /// La referencia no es válida (por ejemplo, empieza por `-`).
+    #[error("referencia inválida `{0}`")]
+    InvalidRef(String),
+
+    /// El merge produjo conflictos; se abortó y el árbol quedó como estaba.
+    #[error("el merge tiene conflictos en: {}", join_paths(files))]
+    MergeConflict { files: Vec<PathBuf> },
+
+    /// No se puede avanzar con fast-forward.
+    #[error("no es posible un fast-forward; la rama ha divergido")]
+    NotFastForward,
+
+    /// El push falló por autenticación.
+    #[error("no se pudo autenticar en el remoto `{remote}`; configura tus credenciales (clave SSH, credential helper de git o `gh auth login`): {stderr}")]
+    PushAuth { remote: String, stderr: String },
+
+    /// No se encontró el ejecutable `gh`.
+    #[error("no se encontró `gh` (GitHub CLI); instálalo desde https://cli.github.com")]
+    GhNotFound,
+
+    /// `gh` no se pudo lanzar o su salida no se pudo leer.
+    #[error("no se pudo ejecutar `gh {args}`: {source}")]
+    GhSpawn {
+        args: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// `gh` terminó con un código de salida distinto de cero.
+    #[error("`gh {args}` falló ({}): {stderr}", exit_text(*.code))]
+    GhFailed {
+        args: String,
+        code: Option<i32>,
+        stderr: String,
+    },
+
+    /// La salida de `gh` no tenía el formato esperado.
+    #[error("salida inesperada de `gh {args}`: {detail}")]
+    GhOutput { args: String, detail: String },
+
     /// Error de E/S sobre una ruta concreta.
     #[error("{}: {source}", path.display())]
     Io {
@@ -126,6 +190,14 @@ impl Error {
             source,
         }
     }
+}
+
+fn join_paths(files: &[PathBuf]) -> String {
+    files
+        .iter()
+        .map(|f| f.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn exit_text(code: Option<i32>) -> String {
