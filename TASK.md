@@ -40,12 +40,12 @@ _Última actualización: 2026-11-16_
 - [x] CLI `qorvi new`, `qorvi ls`, `qorvi rm` · Sonnet
 - [x] README y CHANGELOG · Opus
 
-## Fase 2: paneles de terminal (`qorvi-pty`)
+## Fase 2: paneles de terminal (`qorvi-pty`) 🚧
 
-- [ ] Panel PTY con emulador y respondedor de consultas
-- [ ] Reenvío de ratón y scrollback
-- [ ] nvim con `--listen` para abrir archivos desde el explorador
-- [ ] Prueba en Windows (ConPTY)
+- [x] Panel PTY con emulador y respondedor de consultas · Opus
+- [ ] Reenvío de ratón y scrollback · Sonnet
+- [ ] nvim con `--listen` para abrir archivos desde el explorador · Sonnet
+- [ ] Prueba en Windows (ConPTY) · Usuario
 
 ## Fase 3: agentes (`qorvi-acp`)
 

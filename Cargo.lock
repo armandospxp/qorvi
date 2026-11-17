@@ -1648,6 +1648,13 @@ dependencies = [
 [[package]]
 name = "qorvi-pty"
 version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "portable-pty",
+ "tempfile",
+ "thiserror 2.0.21",
+ "vt100",
+]
 
 [[package]]
 name = "qorvi-tui"
