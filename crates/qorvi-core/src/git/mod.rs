@@ -10,6 +10,13 @@ use std::process::{Command, Output, Stdio};
 
 use crate::error::{Error, Result};
 
+mod branch;
+mod status;
+mod worktree;
+
+pub use status::{FileState, FileStatus};
+pub use worktree::WorktreeInfo;
+
 /// Ejecuta `git` en un directorio fijo.
 #[derive(Debug, Clone)]
 pub struct Git {

@@ -41,6 +41,14 @@ pub enum Error {
     #[error("{} es un repositorio bare; qorvi necesita un repositorio con árbol de trabajo", .0.display())]
     BareRepo(PathBuf),
 
+    /// Ya existe una rama con ese nombre.
+    #[error("ya existe la rama `{0}`")]
+    BranchExists(String),
+
+    /// La ruta de destino ya existe y no está vacía.
+    #[error("{} ya existe y no está vacío", .0.display())]
+    PathExists(PathBuf),
+
     /// Error de E/S sobre una ruta concreta.
     #[error("{}: {source}", path.display())]
     Io {
