@@ -4,7 +4,7 @@ Estado del proyecto por fases. Marca: `[x]` hecho · `[~]` en curso · `[ ]` pen
 Ejecutor: **Opus** (orquestador), **Sonnet** / **Haiku** (workers), **Usuario**.
 Los cambios entregados se detallan en [CHANGELOG.md](CHANGELOG.md).
 
-_Última actualización: 2026-11-15_
+_Última actualización: 2026-11-16_
 
 ## Fase 0: esqueleto y spikes ✅
 
@@ -29,8 +29,8 @@ _Última actualización: 2026-11-15_
 
 ## Fase 1: núcleo (`qorvi-core`) y CLI
 
-- [ ] Errores y ejecutor de comandos git · Opus
-- [ ] Descubrir el repositorio principal · Opus
+- [x] Errores y ejecutor de comandos git · Opus
+- [x] Descubrir el repositorio principal · Opus
 - [ ] Rutas y configuración · Sonnet
 - [ ] Tareas y persistencia atómica · Sonnet
 - [ ] Git: worktrees, ramas y estado · Sonnet
