@@ -85,6 +85,14 @@ pub enum Error {
     )]
     NoDefaultAgent { available: String },
 
+    /// Ya existe una rama con ese nombre.
+    #[error("ya existe la rama `{0}`")]
+    BranchExists(String),
+
+    /// La ruta de destino ya existe y no está vacía.
+    #[error("{} ya existe y no está vacío", .0.display())]
+    PathExists(PathBuf),
+
     /// Error de E/S sobre una ruta concreta.
     #[error("{}: {source}", path.display())]
     Io {
