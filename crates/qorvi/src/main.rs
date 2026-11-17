@@ -82,14 +82,37 @@ fn main() -> ExitCode {
     match run(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            let mut msg = e.to_string();
-            for cause in e.chain().skip(1) {
-                msg.push_str(&format!(": {cause}"));
+            // `qorvi ls | head`: que se cierre la tubería no es un error.
+            if e.chain().any(|c| {
+                let kind = c
+                    .downcast_ref::<std::io::Error>()
+                    .map(std::io::Error::kind)
+                    .or_else(|| {
+                        c.downcast_ref::<serde_json::Error>()
+                            .and_then(serde_json::Error::io_error_kind)
+                    });
+                kind == Some(std::io::ErrorKind::BrokenPipe)
+            }) {
+                return ExitCode::SUCCESS;
             }
-            eprintln!("error: {msg}");
+            eprintln!("error: {}", error_message(&e));
             ExitCode::from(1)
         }
     }
+}
+
+/// Mensaje con la cadena de causas, sin repetir las que el mensaje anterior ya incluye
+/// (los errores de `qorvi-core` suelen llevar su causa en el propio texto).
+fn error_message(e: &anyhow::Error) -> String {
+    let mut msg = e.to_string();
+    for cause in e.chain().skip(1) {
+        let cause = cause.to_string();
+        if !msg.contains(&cause) {
+            msg.push_str(": ");
+            msg.push_str(&cause);
+        }
+    }
+    msg
 }
 
 fn open(dir: Option<PathBuf>) -> anyhow::Result<Workspace> {
@@ -165,4 +188,17 @@ fn doctor_keys() -> anyhow::Result<()> {
         )
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mensaje_de_error_sin_causas_repetidas() {
+        let io = std::io::Error::new(std::io::ErrorKind::NotFound, "no existe");
+        let core = qorvi_core::Error::io("/x", io);
+        let e = anyhow::Error::new(core).context("no se pudo abrir");
+        assert_eq!(error_message(&e), "no se pudo abrir: /x: no existe");
+    }
 }
