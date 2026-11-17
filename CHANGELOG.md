@@ -14,3 +14,7 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Atajos con tecla prefijo `Ctrl+Space` + tecla (por defecto en macOS) además de `Alt+tecla` (por defecto en Windows/Linux); `Ctrl+Space q` sale siempre.
 - Ratón en la TUI: clic para enfocar paneles, cambiar de tarea, usar el explorador y elegir opciones de permiso; rueda para desplazar el chat y el explorador.
 - Atajos directos `Cmd` (macOS) / `Ctrl` (Windows/Linux) con detección automática del protocolo de teclado kitty; `qorvi doctor keys` diagnostica la terminal y da la config para liberar atajos en Ghostty.
+- Núcleo (`qorvi-core`): ejecutor de `git` sin shell ni prompts y descubrimiento del repositorio principal (también desde el worktree de una tarea).
+- Configuración global y por repositorio (`.qorvi.toml`) con fusión campo a campo; rutas de config y datos por plataforma (`QORVI_CONFIG_DIR`, `QORVI_DATA_DIR`). Los worktrees de tareas viven fuera del repo, en el directorio de datos.
+- Tareas persistidas en `.git/qorvi/tasks.json` con escritura atómica y lock entre procesos.
+- Operaciones git de worktrees, ramas y estado de archivos (`status --porcelain=v2`).

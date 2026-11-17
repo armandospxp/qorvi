@@ -27,13 +27,13 @@ _Última actualización: 2026-11-16_
 - [ ] Opción `[keys] style` en la config (llega con la config de la fase 1; hoy: variable `QORVI_KEYS`) · Sonnet
 - [ ] Probar atajos en Ghostty, iTerm2, Terminal.app, VS Code, Windows Terminal y GNOME Terminal · Usuario
 
-## Fase 1: núcleo (`qorvi-core`) y CLI
+## Fase 1: núcleo (`qorvi-core`) y CLI 🚧
 
 - [x] Errores y ejecutor de comandos git · Opus
 - [x] Descubrir el repositorio principal · Opus
-- [ ] Rutas y configuración · Sonnet
-- [ ] Tareas y persistencia atómica · Sonnet
-- [ ] Git: worktrees, ramas y estado · Sonnet
+- [x] Rutas y configuración · Sonnet
+- [x] Tareas y persistencia atómica · Sonnet
+- [x] Git: worktrees, ramas y estado · Sonnet
 - [ ] Git: cambios, diff por archivo y lista de archivos · Sonnet
 - [ ] Git: commit, merge, push, PR y borrado · Sonnet
 - [ ] `Workspace`: crear y borrar tareas, worktrees huérfanos · Opus
