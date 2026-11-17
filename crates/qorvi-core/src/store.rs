@@ -6,7 +6,7 @@
 //! qorvi (p. ej. la TUI y `qorvi new` en otra terminal) no se pisan. `load` + `save` sueltos
 //! solo son seguros si ningún otro proceso escribe a la vez.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -163,7 +163,7 @@ impl Store {
         tmp.persist(&self.path)
             .map_err(|e| Error::io(&self.path, e.error))?;
         #[cfg(unix)]
-        if let Ok(d) = File::open(dir) {
+        if let Ok(d) = std::fs::File::open(dir) {
             let _ = d.sync_all(); // best effort
         }
         Ok(())

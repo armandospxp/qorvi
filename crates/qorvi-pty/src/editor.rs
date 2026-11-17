@@ -9,7 +9,9 @@
 
 use std::ffi::{OsStr, OsString};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(any(unix, test))]
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 

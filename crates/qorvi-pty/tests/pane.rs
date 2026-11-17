@@ -4,6 +4,7 @@
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use qorvi_pty::{Pane, PaneCommand, PaneEvent, PaneSize};
 
@@ -62,6 +63,7 @@ fn wait_exit(h: &Harness) -> qorvi_pty::ExitStatus {
     panic!("el programa no terminó; pantalla:\n{}", h.pane.contents());
 }
 
+#[cfg(unix)]
 fn installed(program: &str) -> bool {
     std::process::Command::new(program)
         .arg("--version")
@@ -71,6 +73,7 @@ fn installed(program: &str) -> bool {
         .is_ok()
 }
 
+#[cfg(unix)]
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
