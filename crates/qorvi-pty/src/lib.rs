@@ -15,9 +15,10 @@
 //! ```
 
 pub mod keys;
+pub mod mouse;
 mod pane;
 mod responder;
 
-pub use pane::{Error, ExitStatus, Pane, PaneCommand, PaneEvent, PaneSize, Result};
+pub use pane::{Error, ExitStatus, Pane, PaneCommand, PaneEvent, PaneSize, Result, WheelAction};
 pub use responder::Responder;
 pub use vt100;
