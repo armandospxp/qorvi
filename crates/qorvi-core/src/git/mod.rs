@@ -14,6 +14,8 @@ mod branch;
 mod status;
 mod worktree;
 
+#[cfg(test)]
+pub(crate) use branch::testutil;
 pub use status::{FileState, FileStatus};
 pub use worktree::WorktreeInfo;
 

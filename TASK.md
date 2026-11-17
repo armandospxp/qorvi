@@ -36,7 +36,7 @@ _Última actualización: 2026-11-16_
 - [x] Git: worktrees, ramas y estado · Sonnet
 - [ ] Git: cambios, diff por archivo y lista de archivos · Sonnet
 - [ ] Git: commit, merge, push, PR y borrado · Sonnet
-- [ ] `Workspace`: crear y borrar tareas, worktrees huérfanos · Opus
+- [x] `Workspace`: crear y borrar tareas, worktrees huérfanos · Opus
 - [ ] CLI `qorvi new`, `qorvi ls`, `qorvi rm` · Sonnet
 - [ ] README y CHANGELOG · Haiku
 

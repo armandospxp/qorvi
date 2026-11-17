@@ -93,6 +93,22 @@ pub enum Error {
     #[error("{} ya existe y no está vacío", .0.display())]
     PathExists(PathBuf),
 
+    /// El worktree de la tarea tiene cambios sin commitear o archivos sin seguimiento.
+    #[error("la tarea `{0}` tiene cambios sin commitear o archivos nuevos; usa --force para borrarla igualmente")]
+    TaskHasChanges(String),
+
+    /// La rama de la tarea tiene commits que no están en su rama base.
+    #[error("la rama de la tarea `{task}` tiene commits que no están en `{base}`; haz merge, conserva la rama o usa --force")]
+    UnmergedBranch { task: String, base: String },
+
+    /// El worktree indicado no es un huérfano de qorvi.
+    #[error("{} no es un worktree huérfano de qorvi", .0.display())]
+    NotAnOrphan(PathBuf),
+
+    /// No hay rama de partida: HEAD separado y sin rama por defecto.
+    #[error("no se pudo deducir la rama de partida (HEAD separado); indícala con --base")]
+    NoBaseBranch,
+
     /// Error de E/S sobre una ruta concreta.
     #[error("{}: {source}", path.display())]
     Io {
