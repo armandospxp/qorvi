@@ -41,6 +41,30 @@ pub enum Error {
     #[error("{} es un repositorio bare; qorvi necesita un repositorio con árbol de trabajo", .0.display())]
     BareRepo(PathBuf),
 
+    /// El nombre de tarea no es válido (también es nombre de rama y de directorio).
+    #[error("nombre de tarea inválido `{name}`: {reason}")]
+    InvalidTaskName { name: String, reason: String },
+
+    /// Ya existe una tarea con ese nombre (o uno que solo difiere en mayúsculas).
+    #[error("ya existe la tarea `{0}`")]
+    TaskExists(String),
+
+    /// No existe la tarea pedida.
+    #[error("no existe la tarea `{0}`")]
+    TaskNotFound(String),
+
+    /// El archivo de estado no se pudo interpretar.
+    #[error("estado corrupto en {}: {message}", path.display())]
+    CorruptState { path: PathBuf, message: String },
+
+    /// El archivo de estado lo escribió una versión más nueva de qorvi.
+    #[error("{} usa la versión de estado {found}, pero esta versión de qorvi solo entiende hasta la {supported}; actualiza qorvi", path.display())]
+    UnsupportedStateVersion {
+        path: PathBuf,
+        found: u64,
+        supported: u64,
+    },
+
     /// Error de E/S sobre una ruta concreta.
     #[error("{}: {source}", path.display())]
     Io {
