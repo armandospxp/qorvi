@@ -43,8 +43,9 @@ _Última actualización: 2026-11-16_
 ## Fase 2: paneles de terminal (`qorvi-pty`) 🚧
 
 - [x] Panel PTY con emulador y respondedor de consultas · Opus
-- [ ] Reenvío de ratón y scrollback · Sonnet
-- [ ] nvim con `--listen` para abrir archivos desde el explorador · Sonnet
+- [x] Reenvío de ratón y scrollback · Sonnet
+- [x] nvim con `--listen` para abrir archivos desde el explorador · Sonnet
+- [x] Compilación sin warnings para Windows y macOS (clippy con `--target`) · Opus
 - [ ] Prueba en Windows (ConPTY) · Usuario
 
 ## Fase 3: agentes (`qorvi-acp`)

@@ -22,3 +22,9 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Git: commit, merge (merge, squash o fast-forward, abortando limpio si hay conflicto), push, borrado de ramas remotas y PRs con `gh`.
 - `Workspace`: crear y borrar tareas sin perder trabajo (sin `--force` se niega con cambios sin commitear o commits sin integrar) y detectar worktrees huérfanos.
 - CLI: `qorvi new`, `qorvi ls` (`--json`) y `qorvi rm` (`--keep-branch`, `--orphans`), con `-C <dir>`.
+- Paneles de terminal (`qorvi-pty`): programa en un PTY con pantalla emulada, respuestas a consultas de terminal (cursor, DA1/DA2, XTVERSION, colores), código de salida, título, campana y pegado seguro con bracketed paste.
+- Ratón en los paneles (X10, UTF-8 y SGR, según lo que pida el programa) y scrollback; la rueda desplaza el historial o envía flechas en pantallas como less.
+- Editor de la tarea: nvim se lanza con `--listen` para abrir archivos desde el explorador; vim y helix, con teclas (best effort).
+
+### Corregido
+- La CI de Windows fallaba por imports que solo se usan en Unix.
