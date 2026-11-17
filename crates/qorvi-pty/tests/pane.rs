@@ -5,7 +5,9 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+#[cfg(unix)]
+use qorvi_pty::WheelAction;
 use qorvi_pty::{Pane, PaneCommand, PaneEvent, PaneSize};
 
 const T: Duration = Duration::from_secs(10);
@@ -199,6 +201,112 @@ mod unix {
         wait_for(&h, "pegado", |s| s.contains("recibido=E[200~abE[201~"));
     }
 
+    fn click(column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    fn wheel_ev(kind: MouseEventKind) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    /// Script que activa `setup` y muestra los `n` primeros bytes que recibe, con ESC como `E`.
+    fn eco_raw(setup: &str, n: usize) -> String {
+        format!(
+            "printf '{setup}'; stty -echo raw; echo listo; \
+             r=$(dd bs=1 count={n} 2>/dev/null); stty sane; \
+             printf '\\nrecibido=%s\\n' \"$(printf '%s' \"$r\" | tr '\\033' 'E')\"; sleep 5"
+        )
+    }
+
+    #[test]
+    fn clic_con_raton_sgr_llega_al_hijo() {
+        let script = eco_raw("\\033[?1000h\\033[?1006h", 10);
+        let h = spawn("/bin/sh", &["-c", &script], SIZE);
+        wait_for(&h, "terminal en raw", |s| {
+            s.contains("listo") && h.pane.wants_mouse()
+        });
+        assert!(h.pane.send_mouse(click(4, 9)).unwrap());
+        wait_for(&h, "clic", |s| s.contains("recibido=E[<0;5;10M"));
+    }
+
+    #[test]
+    fn sin_modo_raton_send_mouse_devuelve_false() {
+        let h = spawn("/bin/sh", &[], SIZE);
+        h.pane.write(b"echo listo\r").unwrap();
+        wait_for(&h, "listo", |s| s.contains("listo"));
+        assert!(!h.pane.wants_mouse());
+        assert!(!h.pane.send_mouse(click(1, 1)).unwrap());
+    }
+
+    #[test]
+    fn scrollback_desplaza_y_write_vuelve_abajo() {
+        let h = spawn("/bin/sh", &[], SIZE);
+        h.pane.write(b"seq 1 100; echo fin\r").unwrap();
+        wait_for(&h, "fin", |s| s.lines().any(|l| l.trim() == "fin"));
+        let abajo = h.pane.contents();
+        assert!(!h.pane.is_scrolled());
+        h.pane.scroll_up(10);
+        assert_eq!(h.pane.scroll_offset(), 10);
+        assert!(h.pane.is_scrolled());
+        assert_ne!(h.pane.contents(), abajo);
+        h.pane.scroll_down(4);
+        assert_eq!(h.pane.scroll_offset(), 6);
+        h.pane.scroll_to_bottom();
+        assert_eq!(h.pane.scroll_offset(), 0);
+        h.pane.scroll_up(10);
+        h.pane.write(b"").unwrap();
+        assert_eq!(h.pane.scroll_offset(), 0);
+    }
+
+    #[test]
+    fn rueda_sin_raton_desplaza_el_historial() {
+        let h = spawn("/bin/sh", &[], SIZE);
+        h.pane.write(b"seq 1 100; echo fin\r").unwrap();
+        wait_for(&h, "fin", |s| s.lines().any(|l| l.trim() == "fin"));
+        let a = h.pane.wheel(wheel_ev(MouseEventKind::ScrollUp)).unwrap();
+        assert_eq!(a, WheelAction::Scrolled);
+        assert_eq!(h.pane.scroll_offset(), 3);
+        h.pane.wheel(wheel_ev(MouseEventKind::ScrollDown)).unwrap();
+        assert_eq!(h.pane.scroll_offset(), 0);
+        let a = h.pane.wheel(wheel_ev(MouseEventKind::ScrollLeft)).unwrap();
+        assert_eq!(a, WheelAction::Ignored);
+    }
+
+    #[test]
+    fn rueda_en_pantalla_alternativa_envia_flechas() {
+        let script = eco_raw("\\033[?1049h", 9);
+        let h = spawn("/bin/sh", &["-c", &script], SIZE);
+        wait_for(&h, "pantalla alternativa", |s| {
+            s.contains("listo") && h.pane.with_screen(|s| s.alternate_screen())
+        });
+        let a = h.pane.wheel(wheel_ev(MouseEventKind::ScrollUp)).unwrap();
+        assert_eq!(a, WheelAction::SentArrows);
+        // La pantalla alternativa se borra al salir de ella o no: se comprueba lo recibido.
+        wait_for(&h, "flechas", |s| s.contains("recibido=E[AE[AE[A"));
+    }
+
+    #[test]
+    fn rueda_con_raton_se_reenvia() {
+        let script = eco_raw("\\033[?1000h\\033[?1006h", 10);
+        let h = spawn("/bin/sh", &["-c", &script], SIZE);
+        wait_for(&h, "terminal en raw", |s| {
+            s.contains("listo") && h.pane.wants_mouse()
+        });
+        let a = h.pane.wheel(wheel_ev(MouseEventKind::ScrollDown)).unwrap();
+        assert_eq!(a, WheelAction::Forwarded);
+        wait_for(&h, "rueda", |s| s.contains("recibido=E[<65;1;1M"));
+    }
+
     #[test]
     fn nvim_editar_guardar_y_salir() {
         if !installed("nvim") {
@@ -232,11 +340,21 @@ mod unix {
             return;
         }
         let h = spawn("nvim", &["--clean", "-n"], SIZE);
+        // Esperar a que nvim esté listo y active el modo cursor de aplicación.
+        wait_for(&h, "nvim arrancado", |s| s.contains('~'));
+        wait_for(&h, "modo cursor de aplicación", |_| {
+            h.pane.with_screen(|s| s.application_cursor())
+        });
         h.pane.write(b"iabc").unwrap();
+        wait_for(&h, "modo inserción", |s| {
+            s.contains("abc") && s.contains("INSERT")
+        });
         h.pane.send_key(key(KeyCode::Esc)).unwrap();
-        wait_for(&h, "texto", |s| s.contains("abc"));
-        // Dos flechas a la izquierda y una 'X' insertada antes de la 'a'... o donde
-        // caiga el cursor: si las flechas no se entendieran, saldría basura en el texto.
+        // Hasta que nvim procese el Esc (tras su `ttimeoutlen`), una flecha enviada justo
+        // detrás podría leerse como parte de otra secuencia.
+        wait_for(&h, "modo normal", |s| !s.contains("INSERT"));
+        // Dos flechas a la izquierda llevan el cursor a la 'a'; si no se entendieran,
+        // aparecería basura en el texto.
         h.pane.send_key(key(KeyCode::Left)).unwrap();
         h.pane.send_key(key(KeyCode::Left)).unwrap();
         h.pane.write(b"iX").unwrap();

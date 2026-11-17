@@ -14,10 +14,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 
 use crate::keys::{encode_key, encode_paste};
+use crate::mouse::encode_mouse;
 use crate::responder::Responder;
 
 /// Errores de un panel.
@@ -162,6 +163,22 @@ pub enum PaneEvent {
     Exited(ExitStatus),
 }
 
+/// Qué se hizo con un evento de rueda (ver [`Pane::wheel`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WheelAction {
+    /// Se reenvió al programa, que pidió ratón.
+    Forwarded,
+    /// Se desplazó el historial del panel.
+    Scrolled,
+    /// Pantalla alternativa sin ratón: se enviaron flechas arriba/abajo.
+    SentArrows,
+    /// No se hizo nada (rueda horizontal sin ratón pedido).
+    Ignored,
+}
+
+/// Líneas que mueve un paso de rueda.
+const WHEEL_LINES: usize = 3;
+
 /// Cómo terminó el programa del panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExitStatus {
@@ -294,10 +311,13 @@ impl Pane {
     }
 
     /// Escribe bytes crudos al programa.
+    ///
+    /// Como en cualquier terminal, la vista vuelve abajo del todo si estaba desplazada.
     pub fn write(&self, bytes: &[u8]) -> Result<()> {
         if self.exit_status().is_some() {
             return Err(Error::Exited);
         }
+        self.scroll_to_bottom();
         let mut w = lock(&self.writer);
         w.write_all(bytes)?;
         w.flush()?;
@@ -311,6 +331,97 @@ impl Pane {
         match encode_key(key, app_cursor) {
             Some(bytes) => self.write(&bytes).map(|_| true),
             None => Ok(false),
+        }
+    }
+
+    /// ¿Pidió el programa eventos de ratón?
+    pub fn wants_mouse(&self) -> bool {
+        self.with_screen(|s| s.mouse_protocol_mode() != vt100::MouseProtocolMode::None)
+    }
+
+    /// Envía un evento de ratón (coordenadas relativas al panel, base 0) con el modo y la
+    /// codificación que pidió el programa. Devuelve `false` si no lo pidió, o no pidió ese
+    /// tipo de evento, o las coordenadas no caben: la TUI puede hacer otra cosa.
+    pub fn send_mouse(&self, ev: MouseEvent) -> Result<bool> {
+        let (mode, enc) =
+            self.with_screen(|s| (s.mouse_protocol_mode(), s.mouse_protocol_encoding()));
+        match encode_mouse(&ev, mode, enc) {
+            Some(bytes) => self.write(&bytes).map(|_| true),
+            None => Ok(false),
+        }
+    }
+
+    /// Desplaza la vista `lines` líneas hacia el historial, limitada al historial
+    /// disponible. Con la pantalla alternativa (nvim, less) no hay historial y no hace nada.
+    pub fn scroll_up(&self, lines: usize) {
+        self.with_screen_mut(|s| {
+            let n = s.scrollback().saturating_add(lines);
+            s.set_scrollback(n);
+        });
+    }
+
+    /// Desplaza la vista `lines` líneas hacia lo más reciente.
+    pub fn scroll_down(&self, lines: usize) {
+        self.with_screen_mut(|s| {
+            let n = s.scrollback().saturating_sub(lines);
+            s.set_scrollback(n);
+        });
+    }
+
+    /// Vuelve a la parte de abajo (la pantalla en vivo).
+    pub fn scroll_to_bottom(&self) {
+        self.with_screen_mut(|s| {
+            if s.scrollback() != 0 {
+                s.set_scrollback(0);
+            }
+        });
+    }
+
+    /// Líneas que la vista está desplazada hacia el historial (0 = abajo).
+    pub fn scroll_offset(&self) -> usize {
+        self.with_screen(|s| s.scrollback())
+    }
+
+    /// ¿Está la vista desplazada hacia el historial?
+    pub fn is_scrolled(&self) -> bool {
+        self.scroll_offset() > 0
+    }
+
+    /// Política para la rueda del ratón: si el programa pidió ratón se le reenvía; si está
+    /// en pantalla alternativa se le envían 3 flechas arriba/abajo (como `alternateScroll`
+    /// de xterm, respetando el modo cursor de aplicación); si no, se desplaza el historial
+    /// 3 líneas. La rueda horizontal solo se reenvía si el programa pidió ratón.
+    pub fn wheel(&self, ev: MouseEvent) -> Result<WheelAction> {
+        let up = match ev.kind {
+            MouseEventKind::ScrollUp => true,
+            MouseEventKind::ScrollDown => false,
+            MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => {
+                return Ok(if self.send_mouse(ev)? {
+                    WheelAction::Forwarded
+                } else {
+                    WheelAction::Ignored
+                });
+            }
+            _ => return Ok(WheelAction::Ignored),
+        };
+        if self.send_mouse(ev)? {
+            return Ok(WheelAction::Forwarded);
+        }
+        let (alt, app_cursor) =
+            self.with_screen(|s| (s.alternate_screen(), s.application_cursor()));
+        if alt {
+            let code = if up { KeyCode::Up } else { KeyCode::Down };
+            let arrow =
+                encode_key(KeyEvent::new(code, KeyModifiers::NONE), app_cursor).unwrap_or_default();
+            self.write(&arrow.repeat(WHEEL_LINES))?;
+            Ok(WheelAction::SentArrows)
+        } else {
+            if up {
+                self.scroll_up(WHEEL_LINES);
+            } else {
+                self.scroll_down(WHEEL_LINES);
+            }
+            Ok(WheelAction::Scrolled)
         }
     }
 
