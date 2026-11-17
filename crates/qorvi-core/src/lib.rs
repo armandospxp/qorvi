@@ -11,7 +11,7 @@ pub mod workspace;
 
 pub use config::{AgentConfig, Config, ConfigLayer, KeyStyle, KeysConfig};
 pub use error::{Error, Result};
-pub use git::{FileState, FileStatus, Git, GitOutput, WorktreeInfo};
+pub use git::{ChangeKind, FileChange, FileState, FileStatus, Git, GitOutput, WorktreeInfo};
 pub use paths::{Paths, RepoPaths};
 pub use repo::Repo;
 pub use store::{Store, STATE_VERSION};
