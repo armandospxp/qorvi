@@ -18,3 +18,7 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Configuración global y por repositorio (`.qorvi.toml`) con fusión campo a campo; rutas de config y datos por plataforma (`QORVI_CONFIG_DIR`, `QORVI_DATA_DIR`). Los worktrees de tareas viven fuera del repo, en el directorio de datos.
 - Tareas persistidas en `.git/qorvi/tasks.json` con escritura atómica y lock entre procesos.
 - Operaciones git de worktrees, ramas y estado de archivos (`status --porcelain=v2`).
+- Git: cambios de una tarea desde el merge-base (incluidos los no commiteados y untracked), diff por archivo y lista de archivos para el explorador.
+- Git: commit, merge (merge, squash o fast-forward, abortando limpio si hay conflicto), push, borrado de ramas remotas y PRs con `gh`.
+- `Workspace`: crear y borrar tareas sin perder trabajo (sin `--force` se niega con cambios sin commitear o commits sin integrar) y detectar worktrees huérfanos.
+- CLI: `qorvi new`, `qorvi ls` (`--json`) y `qorvi rm` (`--keep-branch`, `--orphans`), con `-C <dir>`.

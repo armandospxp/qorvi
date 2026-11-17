@@ -27,7 +27,7 @@ _Última actualización: 2026-11-16_
 - [ ] Opción `[keys] style` en la config (llega con la config de la fase 1; hoy: variable `QORVI_KEYS`) · Sonnet
 - [ ] Probar atajos en Ghostty, iTerm2, Terminal.app, VS Code, Windows Terminal y GNOME Terminal · Usuario
 
-## Fase 1: núcleo (`qorvi-core`) y CLI 🚧
+## Fase 1: núcleo (`qorvi-core`) y CLI ✅
 
 - [x] Errores y ejecutor de comandos git · Opus
 - [x] Descubrir el repositorio principal · Opus
@@ -37,8 +37,8 @@ _Última actualización: 2026-11-16_
 - [x] Git: cambios, diff por archivo y lista de archivos · Sonnet
 - [x] Git: commit, merge, push, PR y borrado · Sonnet
 - [x] `Workspace`: crear y borrar tareas, worktrees huérfanos · Opus
-- [ ] CLI `qorvi new`, `qorvi ls`, `qorvi rm` · Sonnet
-- [ ] README y CHANGELOG · Haiku
+- [x] CLI `qorvi new`, `qorvi ls`, `qorvi rm` · Sonnet
+- [x] README y CHANGELOG · Opus
 
 ## Fase 2: paneles de terminal (`qorvi-pty`)
 
@@ -59,6 +59,13 @@ _Última actualización: 2026-11-16_
 - [ ] Conectar el mockup a core, PTY y ACP
 - [ ] Notificaciones de tareas en segundo plano
 - [ ] Aviso si la terminal no envía Alt
+
+## Mejoras detectadas
+
+- [ ] El test `snapshots` de qorvi-tui tarda ~90 s: acelerarlo · Sonnet
+- [ ] Avisar en `qorvi new` si un archivo de `copy_files` no está en `.gitignore` (cuenta como cambio y obliga a `rm --force`) · Sonnet
+- [ ] Probar la CLI y los tests de git en macOS y Windows (canonicalización de rutas, `NUL`) · Usuario
+- [ ] Probar `gh` real: `create_pr` y `pr_for_branch` · Usuario
 
 ## Decisiones pendientes
 
