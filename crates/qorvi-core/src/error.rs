@@ -41,6 +41,26 @@ pub enum Error {
     #[error("{} es un repositorio bare; qorvi necesita un repositorio con árbol de trabajo", .0.display())]
     BareRepo(PathBuf),
 
+    /// No se pudo determinar el directorio personal del usuario.
+    #[error(
+        "no se pudo determinar el directorio personal; define QORVI_CONFIG_DIR y QORVI_DATA_DIR"
+    )]
+    NoHomeDir,
+
+    /// Archivo de configuración con TOML inválido o campos desconocidos.
+    #[error("config inválida en {}: {message}", path.display())]
+    Config { path: PathBuf, message: String },
+
+    /// El agente pedido no está definido en la config.
+    #[error("el agente `{name}` no existe; agentes disponibles: {available}")]
+    UnknownAgent { name: String, available: String },
+
+    /// No se indicó agente y no hay `default_agent` en la config.
+    #[error(
+        "no hay agente por defecto; define `default_agent` en la config. Agentes disponibles: {available}"
+    )]
+    NoDefaultAgent { available: String },
+
     /// Error de E/S sobre una ruta concreta.
     #[error("{}: {source}", path.display())]
     Io {
