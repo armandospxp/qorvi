@@ -14,6 +14,7 @@
 //! # Ok::<(), qorvi_pty::Error>(())
 //! ```
 
+pub mod editor;
 pub mod keys;
 mod pane;
 mod responder;
