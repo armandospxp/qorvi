@@ -17,6 +17,17 @@ pub enum KeyStyle {
     Prefix,
 }
 
+impl KeyStyle {
+    /// Nombre en la config y en `QORVI_KEYS`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            KeyStyle::Auto => "auto",
+            KeyStyle::Direct => "direct",
+            KeyStyle::Prefix => "prefix",
+        }
+    }
+}
+
 /// Un agente: ejecutable que habla ACP por stdio.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]

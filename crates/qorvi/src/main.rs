@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use qorvi_core::{Paths, Workspace};
+use qorvi_core::{Config, Paths, Repo, RepoPaths, Workspace};
 
 #[derive(Parser)]
 #[command(
@@ -125,7 +125,9 @@ fn open(dir: Option<PathBuf>) -> anyhow::Result<Workspace> {
 
 fn run(cli: Cli) -> anyhow::Result<()> {
     if cli.demo {
-        return qorvi_tui::run_demo().context("fallo en la interfaz de demostración");
+        let style = key_style();
+        return qorvi_tui::run_demo(style.as_deref())
+            .context("fallo en la interfaz de demostración");
     }
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
@@ -171,6 +173,34 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         }
     }?;
     out.flush().context("no se pudo escribir la salida")
+}
+
+/// Estilo de atajos pedido: `QORVI_KEYS` (para una sesión) o `[keys] style` de la config
+/// global y del repositorio actual, si lo hay. Una config inválida solo avisa: la demo
+/// no la necesita para nada más.
+fn key_style() -> Option<String> {
+    if let Some(v) = std::env::var("QORVI_KEYS")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+    {
+        return Some(v);
+    }
+    let config = Paths::from_env()
+        .map_err(anyhow::Error::from)
+        .and_then(|paths| {
+            let repo = std::env::current_dir()
+                .ok()
+                .and_then(|d| Repo::discover(d).ok())
+                .map(|r| RepoPaths::new(&paths, &r));
+            Ok(Config::load(&paths, repo.as_ref())?)
+        });
+    match config {
+        Ok(c) => c.keys.style.map(|s| s.as_str().to_string()),
+        Err(e) => {
+            eprintln!("aviso: se ignora la config: {}", error_message(&e));
+            None
+        }
+    }
 }
 
 /// Imprime el informe de atajos; consulta a la terminal con el modo raw activo un instante.

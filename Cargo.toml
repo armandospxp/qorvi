@@ -6,3 +6,9 @@ members = ["crates/*", "spikes/*"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+
+# Dependencias optimizadas también en debug: los tests de render de la TUI (miles de
+# frames con ratatui) pasan de ~90 s a unos pocos segundos. Nuestro código sigue sin
+# optimizar, así que los backtraces y el depurador funcionan igual.
+[profile.dev.package."*"]
+opt-level = 2
