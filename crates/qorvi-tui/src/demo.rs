@@ -163,12 +163,14 @@ pub fn demo_state() -> AppState {
                     .to_string(),
             ),
             ChatItem::ToolCall {
+                id: String::new(),
                 title: "Leer src/main.rs".to_string(),
                 kind: "read".to_string(),
                 status: ToolStatus::Completed,
                 expanded: false,
             },
             ChatItem::ToolCall {
+                id: String::new(),
                 title: "Editar src/lib.rs".to_string(),
                 kind: "edit".to_string(),
                 status: ToolStatus::InProgress,
@@ -203,6 +205,7 @@ pub fn demo_state() -> AppState {
                 options: lines(&["Permitir una vez", "Permitir siempre", "Rechazar"]),
                 selected: 0,
                 resolved: None,
+                request: None,
             },
         ],
         &[
@@ -229,6 +232,7 @@ pub fn demo_state() -> AppState {
         vec![
             ChatItem::User("El login acepta contraseñas vacías, arréglalo".to_string()),
             ChatItem::ToolCall {
+                id: String::new(),
                 title: "Editar src/auth.rs".to_string(),
                 kind: "edit".to_string(),
                 status: ToolStatus::Completed,
@@ -264,6 +268,9 @@ pub fn demo_state() -> AppState {
         toasts: Vec::new(),
         last_toast: None,
         agents: lines(&["claude", "codex"]),
+        default_base: "main".to_string(),
+        editor_name: "nvim".to_string(),
+        shell_name: "zsh".to_string(),
         demo: true,
         should_quit: false,
         ascii: std::env::var("QORVI_ASCII").is_ok_and(|v| v == "1"),

@@ -1,27 +1,83 @@
-//! `update`: transforma el estado según una acción. No hace IO.
+//! `update`: transforma el estado según una acción. No hace IO: lo que necesita del
+//! mundo (agentes, paneles, git) lo pide como [`Effect`] y el runtime lo ejecuta.
+//!
+//! En la demo (`state.demo`) todo se simula y no se emiten efectos de IO.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use qorvi_acp::{AgentEvent, StopReason};
+use qorvi_core::{SessionCost, SessionInfo};
 use ratatui::layout::{Position, Rect};
 
-use crate::action::Action;
+use crate::action::{Action, PaneInput};
 use crate::demo::fake_changes;
 use crate::explorer::{visible_rows, RowKind};
 use crate::layout::{self, Areas};
-use crate::state::{AgentStatus, AppState, ChatItem, ConfirmAction, Modal, Pane, Task, ToastLevel};
+use crate::state::{
+    AgentMode, AgentStatus, AppState, ChatItem, ConfirmAction, Modal, Pane, PermissionRef, Task,
+    ToastLevel, ToolStatus,
+};
 use crate::view::{chat, explorer as explorer_view, modals, review, Tier};
 
 /// Líneas que desplaza una muesca de la rueda en el historial del chat.
 const WHEEL_LINES: usize = 3;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Peticiones de IO para el runtime. Las tareas se nombran por su nombre (estable aunque
+/// cambie su posición en la lista).
+#[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     Quit,
+    /// La tarea pasó a ser la activa: arrancar su agente y sus paneles si no corren.
+    Activate(String),
+    Prompt(String, String),
+    Cancel(String),
+    /// Respuesta a un permiso: id y opción (`None` = descartar).
+    Permission(String, u64, Option<String>),
+    SetMode(String, String),
+    CreateTask {
+        name: String,
+        agent: String,
+        base: String,
+    },
+    RemoveTask(String),
+    OpenFile(String, String),
+    RefreshFiles(String),
+    LoadReview(String),
+    Commit(String),
+    Merge(String),
+    PullRequest(String),
+    RecordSession(String, SessionInfo),
+    PaneInput(String, Pane, PaneInput),
+    RestartPane(String, Pane),
 }
 
 pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
+    let mut fx = Vec::new();
     let modal_open = state.modal != Modal::None;
-    // Cualquier acción resuelta consume el prefijo; el tick y el resize no.
-    if !matches!(action, Action::Tick | Action::Resize | Action::PrefixStart) {
+    // Cualquier acción resuelta consume el prefijo; el tick, el resize y los eventos
+    // del runtime no.
+    if matches!(
+        action,
+        Action::Key(_)
+            | Action::Mouse(_)
+            | Action::Paste(_)
+            | Action::PrefixCancel
+            | Action::PrefixLiteral
+            | Action::PrefixUnknown(_)
+            | Action::FocusLeft
+            | Action::FocusRight
+            | Action::FocusUp
+            | Action::FocusDown
+            | Action::SelectTask(_)
+            | Action::NewTask
+            | Action::OpenReview
+            | Action::ToggleZoom
+            | Action::ToggleTerminal
+            | Action::ToggleExplorer
+            | Action::ShowLastToast
+            | Action::Quit
+            | Action::Help
+            | Action::DemoSetStatus(_)
+    ) {
         state.prefix_pending = false;
     }
     match action {
@@ -45,8 +101,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
         Action::PrefixStart => state.prefix_pending = true,
         Action::PrefixCancel => {}
         Action::PrefixLiteral => {
-            // La app real enviará NUL al PTY del panel con foco.
-            state.push_toast("DEMO: se enviaría Ctrl+Space al panel", ToastLevel::Info);
+            if state.demo {
+                state.push_toast("DEMO: se enviaría Ctrl+Space al panel", ToastLevel::Info);
+            } else if !modal_open {
+                pane_input(state, &mut fx, PaneInput::Bytes(vec![0]));
+            }
         }
         Action::PrefixUnknown(name) => {
             state.push_toast(
@@ -54,9 +113,76 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
                 ToastLevel::Warning,
             );
         }
-        Action::DemoSetStatus(status) => set_status(state, status),
-        Action::Key(key) => handle_key(state, key),
-        Action::Mouse(mouse) => handle_mouse(state, mouse),
+        Action::DemoSetStatus(status) => {
+            if state.demo {
+                set_status(state, status)
+            }
+        }
+        Action::Key(key) => handle_key(state, key, &mut fx),
+        Action::Mouse(mouse) => handle_mouse(state, mouse, &mut fx),
+        Action::Paste(text) => paste(state, text, &mut fx),
+        Action::Agent(name, ev) => agent_event(state, &name, ev, &mut fx),
+        Action::AgentStarting(name) => {
+            if let Some(t) = task_mut(state, &name) {
+                t.status = AgentStatus::Connecting;
+            }
+        }
+        Action::AgentFailed(name, msg) => {
+            if let Some(t) = task_mut(state, &name) {
+                t.status = AgentStatus::Error;
+                t.chat.push(ChatItem::Notice(msg.clone()));
+            }
+            state.push_toast(msg, ToastLevel::Error);
+        }
+        Action::TaskCreated(task, warnings) => {
+            let name = task.name.clone();
+            state.tasks.push(*task);
+            state.active = state.tasks.len() - 1;
+            state.focus = Pane::Agent;
+            state.push_toast(format!("Tarea {name} creada"), ToastLevel::Info);
+            for w in warnings {
+                state.push_toast(w, ToastLevel::Warning);
+            }
+            fx.push(Effect::Activate(name));
+        }
+        Action::TaskRemoved(name) => {
+            if let Some(idx) = state.tasks.iter().position(|t| t.name == name) {
+                remove_task_at(state, idx, &mut fx);
+                state.push_toast(format!("Tarea {name} descartada"), ToastLevel::Info);
+            }
+        }
+        Action::FilesLoaded(name, files) => {
+            if let Some(t) = task_mut(state, &name) {
+                t.files = files;
+            }
+        }
+        Action::ReviewLoaded(name, files) => {
+            let active = state.active_task().is_some_and(|t| t.name == name);
+            if active && matches!(state.modal, Modal::None | Modal::Review { .. }) {
+                let selected = match &state.modal {
+                    Modal::Review { selected, .. } => {
+                        (*selected).min(files.len().saturating_sub(1))
+                    }
+                    _ => 0,
+                };
+                state.modal = Modal::Review { files, selected };
+            }
+        }
+        Action::PaneNote(name, pane, note) => {
+            if let Some(t) = task_mut(state, &name) {
+                match pane {
+                    Pane::Editor => t.editor_note = note,
+                    Pane::Terminal => t.terminal_note = note,
+                    _ => {}
+                }
+            }
+        }
+        Action::EditorOpened(name, path) => {
+            if let Some(t) = task_mut(state, &name) {
+                t.editor_file = Some(path);
+            }
+        }
+        Action::Toast(text, level) => state.push_toast(text, level),
         // El resto de acciones de navegación no actúan con un diálogo abierto.
         _ if modal_open => {}
         Action::FocusLeft => focus_horizontal(state, false),
@@ -67,21 +193,33 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
             }
         }
         Action::FocusDown => state.focus = Pane::Terminal,
-        Action::SelectTask(i) => select_task(state, i),
+        Action::SelectTask(i) => select_task(state, i, &mut fx),
         Action::NewTask => open_new_task(state),
         Action::OpenReview => {
-            if state.active_task().is_some() {
-                state.modal = Modal::Review {
-                    files: fake_changes(),
-                    selected: 0,
-                };
+            if let Some(task) = state.active_task() {
+                if state.demo {
+                    state.modal = Modal::Review {
+                        files: fake_changes(),
+                        selected: 0,
+                    };
+                } else {
+                    fx.push(Effect::LoadReview(task.name.clone()));
+                }
             }
         }
         Action::ToggleZoom => state.zoom = !state.zoom,
         Action::ToggleTerminal => state.terminal_minimized = !state.terminal_minimized,
         Action::ToggleExplorer => toggle_explorer(state),
     }
-    Vec::new()
+    fx
+}
+
+fn task_mut<'a>(state: &'a mut AppState, name: &str) -> Option<&'a mut Task> {
+    state.tasks.iter_mut().find(|t| t.name == name)
+}
+
+fn active_name(state: &AppState) -> Option<String> {
+    state.active_task().map(|t| t.name.clone())
 }
 
 fn tick(state: &mut AppState) {
@@ -128,7 +266,7 @@ fn focus_horizontal(state: &mut AppState, right: bool) {
     };
 }
 
-fn select_task(state: &mut AppState, i: usize) {
+fn select_task(state: &mut AppState, i: usize, fx: &mut Vec<Effect>) {
     if i >= state.tasks.len() {
         return;
     }
@@ -136,13 +274,16 @@ fn select_task(state: &mut AppState, i: usize) {
     if state.tasks[i].status == AgentStatus::Done {
         state.tasks[i].status = AgentStatus::Idle;
     }
+    if !state.demo {
+        fx.push(Effect::Activate(state.tasks[i].name.clone()));
+    }
 }
 
 fn open_new_task(state: &mut AppState) {
     state.modal = Modal::NewTask {
         name: String::new(),
         agent_idx: 0,
-        base: "main".to_string(),
+        base: state.default_base.clone(),
         field: 0,
     };
 }
@@ -164,6 +305,7 @@ fn set_status(state: &mut AppState, status: AgentStatus) {
                 ],
                 selected: 0,
                 resolved: None,
+                request: None,
             });
             state.push_toast(
                 format!("Tarea {name} esperando permiso"),
@@ -184,19 +326,43 @@ fn is_text_modifier(m: KeyModifiers) -> bool {
     (m - KeyModifiers::SHIFT).is_empty()
 }
 
-fn handle_key(state: &mut AppState, key: KeyEvent) {
+/// Envía `input` al panel con foco (editor o terminal) de la tarea activa.
+fn pane_input(state: &AppState, fx: &mut Vec<Effect>, input: PaneInput) {
+    if let (Some(name), pane @ (Pane::Editor | Pane::Terminal)) = (active_name(state), state.focus)
+    {
+        fx.push(Effect::PaneInput(name, pane, input));
+    }
+}
+
+fn handle_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
     match state.modal {
-        Modal::None => {
-            match state.focus {
-                Pane::Agent => agent_key(state, key),
-                Pane::Explorer => explorer_key(state, key),
-                // Editor y Terminal: en la demo las teclas se ignoran.
-                Pane::Editor | Pane::Terminal => {}
+        Modal::None => match state.focus {
+            Pane::Agent => agent_key(state, key, fx),
+            Pane::Explorer => explorer_key(state, key, fx),
+            Pane::Editor | Pane::Terminal => {
+                // En la demo las teclas se ignoran.
+                if state.demo {
+                    return;
+                }
+                let Some(task) = state.active_task() else {
+                    return;
+                };
+                let note = match state.focus {
+                    Pane::Editor => &task.editor_note,
+                    _ => &task.terminal_note,
+                };
+                if note.is_some() {
+                    if key.code == KeyCode::Enter {
+                        fx.push(Effect::RestartPane(task.name.clone(), state.focus));
+                    }
+                } else {
+                    pane_input(state, fx, PaneInput::Key(key));
+                }
             }
-        }
-        Modal::NewTask { .. } => new_task_key(state, key),
-        Modal::Confirm { .. } => confirm_key(state, key),
-        Modal::Review { .. } => review_key(state, key),
+        },
+        Modal::NewTask { .. } => new_task_key(state, key, fx),
+        Modal::Confirm { .. } => confirm_key(state, key, fx),
+        Modal::Review { .. } => review_key(state, key, fx),
         Modal::Help => {
             if key.code == KeyCode::Esc {
                 state.modal = Modal::None;
@@ -205,10 +371,39 @@ fn handle_key(state: &mut AppState, key: KeyEvent) {
     }
 }
 
-fn explorer_key(state: &mut AppState, key: KeyEvent) {
+fn paste(state: &mut AppState, text: String, fx: &mut Vec<Effect>) {
+    match &mut state.modal {
+        Modal::NewTask {
+            name, base, field, ..
+        } => {
+            let line: String = text.lines().next().unwrap_or_default().trim().to_string();
+            match *field {
+                0 => name.push_str(&line),
+                2 => base.push_str(&line),
+                _ => {}
+            }
+        }
+        Modal::None => match state.focus {
+            Pane::Agent => {
+                if let Some(t) = state.active_task_mut() {
+                    t.input.push_str(&text.replace("\r\n", "\n"));
+                    t.chat_scroll = 0;
+                }
+            }
+            Pane::Editor | Pane::Terminal if !state.demo => {
+                pane_input(state, fx, PaneInput::Paste(text));
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+fn explorer_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
     if !is_text_modifier(key.modifiers) {
         return;
     }
+    let demo = state.demo;
     let mut toast = None;
     let mut open_in_editor = false;
     {
@@ -216,7 +411,11 @@ fn explorer_key(state: &mut AppState, key: KeyEvent) {
             return;
         };
         if key.code == KeyCode::Char('r') {
-            toast = Some("DEMO: árbol refrescado".to_string());
+            if demo {
+                toast = Some("DEMO: árbol refrescado".to_string());
+            } else {
+                fx.push(Effect::RefreshFiles(task.name.clone()));
+            }
         }
         let rows = visible_rows(&task.files, &task.explorer.expanded);
         if rows.is_empty() {
@@ -239,8 +438,12 @@ fn explorer_key(state: &mut AppState, key: KeyEvent) {
                 }
             }
             KeyCode::Enter => {
-                task.editor_file = Some(row.path.clone());
-                toast = Some(format!("DEMO: se abriría {} en nvim (--remote)", row.path));
+                if demo {
+                    task.editor_file = Some(row.path.clone());
+                    toast = Some(format!("DEMO: se abriría {} en nvim (--remote)", row.path));
+                } else {
+                    fx.push(Effect::OpenFile(task.name.clone(), row.path.clone()));
+                }
                 open_in_editor = true;
             }
             KeyCode::Char('h') => {
@@ -269,7 +472,8 @@ fn last_unresolved_permission(task: &Task) -> Option<usize> {
         .rposition(|c| matches!(c, ChatItem::Permission { resolved: None, .. }))
 }
 
-fn agent_key(state: &mut AppState, key: KeyEvent) {
+fn agent_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
+    let demo = state.demo;
     let Some(task) = state.active_task_mut() else {
         return;
     };
@@ -277,11 +481,34 @@ fn agent_key(state: &mut AppState, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc => {
-            if task.status == AgentStatus::Working {
-                task.status = AgentStatus::Idle;
-                task.chat
-                    .push(ChatItem::Notice("Turno cancelado".to_string()));
+            if demo {
+                if task.status == AgentStatus::Working {
+                    task.status = AgentStatus::Idle;
+                    task.chat
+                        .push(ChatItem::Notice("Turno cancelado".to_string()));
+                }
+            } else if matches!(
+                task.status,
+                AgentStatus::Working | AgentStatus::NeedsPermission
+            ) {
+                fx.push(Effect::Cancel(task.name.clone()));
             }
+        }
+        KeyCode::BackTab if !demo => {
+            // Shift+Tab: siguiente modo de permisos del agente.
+            if task.modes.is_empty() {
+                state.push_toast("El agente no tiene modos de permisos", ToastLevel::Info);
+                return;
+            }
+            let cur = task
+                .mode
+                .as_ref()
+                .and_then(|m| task.modes.iter().position(|x| &x.id == m));
+            let next = cur.map_or(0, |i| (i + 1) % task.modes.len());
+            fx.push(Effect::SetMode(
+                task.name.clone(),
+                task.modes[next].id.clone(),
+            ));
         }
         KeyCode::Up | KeyCode::Down if perm_idx.is_some() => {
             if let Some(ChatItem::Permission {
@@ -312,22 +539,43 @@ fn agent_key(state: &mut AppState, key: KeyEvent) {
                     options,
                     selected,
                     resolved,
+                    request,
                     ..
                 }) = task.chat.get_mut(i)
                 {
                     *resolved = Some(*selected);
                     answered = options.get(*selected).cloned();
+                    if let Some(r) = request {
+                        fx.push(Effect::Permission(
+                            task.name.clone(),
+                            r.id,
+                            r.option_ids.get(*selected).cloned(),
+                        ));
+                    }
                 }
                 task.status = AgentStatus::Working;
                 if let Some(option) = answered {
                     state.push_toast(format!("Permiso respondido: {option}"), ToastLevel::Info);
                 }
             } else if !task.input.trim().is_empty() {
-                let text = std::mem::take(&mut task.input);
-                task.chat_scroll = 0;
-                task.chat.push(ChatItem::User(text));
-                task.chat
-                    .push(ChatItem::Agent("DEMO: respuesta simulada.".to_string()));
+                if demo {
+                    let text = std::mem::take(&mut task.input);
+                    task.chat_scroll = 0;
+                    task.chat.push(ChatItem::User(text));
+                    task.chat
+                        .push(ChatItem::Agent("DEMO: respuesta simulada.".to_string()));
+                } else if task.status == AgentStatus::Working {
+                    state.push_toast(
+                        "El agente está trabajando: espera o cancela con Esc",
+                        ToastLevel::Warning,
+                    );
+                } else {
+                    let text = std::mem::take(&mut task.input);
+                    task.chat_scroll = 0;
+                    task.chat.push(ChatItem::User(text.clone()));
+                    task.status = AgentStatus::Working;
+                    fx.push(Effect::Prompt(task.name.clone(), text));
+                }
             }
         }
         KeyCode::Backspace => {
@@ -342,7 +590,235 @@ fn agent_key(state: &mut AppState, key: KeyEvent) {
     }
 }
 
-fn handle_mouse(state: &mut AppState, mouse: MouseEvent) {
+/// Añade texto al último mensaje si es del mismo tipo; si no, abre uno nuevo.
+fn append_chunk(task: &mut Task, text: String, user: bool) {
+    match task.chat.last_mut() {
+        Some(ChatItem::User(t)) if user => t.push_str(&text),
+        Some(ChatItem::Agent(t)) if !user => t.push_str(&text),
+        _ => task.chat.push(if user {
+            ChatItem::User(text)
+        } else {
+            ChatItem::Agent(text)
+        }),
+    }
+}
+
+fn tool_status(s: qorvi_acp::ToolStatus) -> ToolStatus {
+    match s {
+        qorvi_acp::ToolStatus::Pending => ToolStatus::Pending,
+        qorvi_acp::ToolStatus::InProgress => ToolStatus::InProgress,
+        qorvi_acp::ToolStatus::Completed => ToolStatus::Completed,
+        qorvi_acp::ToolStatus::Failed => ToolStatus::Failed,
+    }
+}
+
+/// Descarta los permisos sin responder (`id` = solo ese; `None` = todos).
+fn discard_permissions(task: &mut Task, id: Option<u64>) {
+    for item in &mut task.chat {
+        if let ChatItem::Permission {
+            options,
+            resolved: resolved @ None,
+            request,
+            ..
+        } = item
+        {
+            if id.is_none() || request.as_ref().map(|r| r.id) == id {
+                *resolved = Some(options.len());
+            }
+        }
+    }
+}
+
+fn agent_event(state: &mut AppState, name: &str, ev: AgentEvent, fx: &mut Vec<Effect>) {
+    let is_active = state.active_task().is_some_and(|t| t.name == name);
+    let Some(task) = task_mut(state, name) else {
+        return;
+    };
+    let mut toast: Option<(String, ToastLevel)> = None;
+    let session = |info: SessionInfo| Effect::RecordSession(name.to_string(), info);
+    match ev {
+        AgentEvent::Ready(r) => {
+            if matches!(
+                task.status,
+                AgentStatus::Connecting | AgentStatus::Disconnected | AgentStatus::Error
+            ) {
+                task.status = AgentStatus::Idle;
+            }
+            if let Some(m) = r.modes {
+                task.mode = Some(m.current);
+                task.modes = m
+                    .available
+                    .into_iter()
+                    .map(|m| AgentMode {
+                        id: m.id,
+                        name: m.name,
+                    })
+                    .collect();
+            }
+            if r.resumed {
+                task.chat
+                    .push(ChatItem::Notice("Sesión reanudada".to_string()));
+            }
+            fx.push(session(SessionInfo {
+                session_id: Some(r.session_id),
+                ..Default::default()
+            }));
+        }
+        AgentEvent::UserChunk(t) => append_chunk(task, t, true),
+        AgentEvent::MessageChunk(t) => append_chunk(task, t, false),
+        AgentEvent::ThoughtChunk(_) | AgentEvent::Plan(_) | AgentEvent::Stderr(_) => {}
+        AgentEvent::ToolCall(tc) => task.chat.push(ChatItem::ToolCall {
+            id: tc.id,
+            title: tc.title,
+            kind: tc.kind,
+            status: tool_status(tc.status),
+            expanded: false,
+        }),
+        AgentEvent::ToolCallUpdate(p) => {
+            let found = task
+                .chat
+                .iter_mut()
+                .rev()
+                .find(|c| matches!(c, ChatItem::ToolCall { id, .. } if *id == p.id));
+            if let Some(ChatItem::ToolCall {
+                title,
+                kind,
+                status,
+                ..
+            }) = found
+            {
+                if let Some(t) = p.title {
+                    *title = t;
+                }
+                if let Some(k) = p.kind {
+                    *kind = k;
+                }
+                if let Some(s) = p.status {
+                    *status = tool_status(s);
+                }
+            }
+        }
+        AgentEvent::PermissionRequest(req) => {
+            task.chat.push(ChatItem::Permission {
+                title: req.title,
+                options: req.options.iter().map(|o| o.name.clone()).collect(),
+                selected: 0,
+                resolved: None,
+                request: Some(PermissionRef {
+                    id: req.id,
+                    option_ids: req.options.into_iter().map(|o| o.id).collect(),
+                }),
+            });
+            task.status = AgentStatus::NeedsPermission;
+            if !is_active {
+                toast = Some((
+                    format!("Tarea {name} esperando permiso"),
+                    ToastLevel::Warning,
+                ));
+            }
+        }
+        AgentEvent::PermissionCancelled(id) => discard_permissions(task, Some(id)),
+        AgentEvent::TurnEnded(reason) => {
+            discard_permissions(task, None);
+            let note = match reason {
+                StopReason::EndTurn => None,
+                StopReason::Cancelled => Some("Turno cancelado"),
+                StopReason::Refusal => Some("El agente rechazó continuar"),
+                StopReason::MaxTokens => Some("El agente llegó al límite de tokens"),
+                StopReason::MaxTurnRequests => Some("El agente llegó al límite de peticiones"),
+                StopReason::Other => Some("El turno terminó"),
+            };
+            if let Some(n) = note {
+                task.chat.push(ChatItem::Notice(n.to_string()));
+            }
+            task.status = if is_active {
+                AgentStatus::Idle
+            } else {
+                toast = Some((format!("Tarea {name} terminó"), ToastLevel::Info));
+                AgentStatus::Done
+            };
+            fx.push(Effect::RefreshFiles(name.to_string()));
+        }
+        AgentEvent::TurnFailed(msg) => {
+            discard_permissions(task, None);
+            task.status = AgentStatus::Error;
+            task.chat
+                .push(ChatItem::Notice(format!("El turno falló: {msg}")));
+            toast = Some((format!("El agente de {name} falló"), ToastLevel::Error));
+        }
+        AgentEvent::ModeChanged(m) => {
+            let label = task
+                .modes
+                .iter()
+                .find(|x| x.id == m)
+                .map_or(m.clone(), |x| x.name.clone());
+            task.chat
+                .push(ChatItem::Notice(format!("Modo de permisos: {label}")));
+            task.mode = Some(m);
+        }
+        AgentEvent::Usage(u) => {
+            if let Some(c) = u.cost {
+                task.cost_usd = c.amount;
+                fx.push(session(SessionInfo {
+                    cost: Some(SessionCost {
+                        amount: c.amount,
+                        currency: c.currency,
+                    }),
+                    ..Default::default()
+                }));
+            }
+        }
+        AgentEvent::Title(t) => {
+            task.title = t.clone();
+            fx.push(session(SessionInfo {
+                title: Some(t),
+                ..Default::default()
+            }));
+        }
+        AgentEvent::FsDenied { path, reason } => task.chat.push(ChatItem::Notice(format!(
+            "Acceso denegado a {}: {reason}",
+            path.display()
+        ))),
+        AgentEvent::Notice(n) => task.chat.push(ChatItem::Notice(n)),
+        AgentEvent::Exited { error, .. } => {
+            discard_permissions(task, None);
+            match error {
+                Some(e) => {
+                    task.status = AgentStatus::Error;
+                    task.chat
+                        .push(ChatItem::Notice(format!("El agente se cerró: {e}")));
+                    toast = Some((format!("El agente de {name} se cerró"), ToastLevel::Error));
+                }
+                None => task.status = AgentStatus::Disconnected,
+            }
+        }
+    }
+    if let Some((text, level)) = toast {
+        state.push_toast(text, level);
+    }
+}
+
+/// Rectángulo interior del editor o la terminal bajo `pos`, si lo hay.
+fn pane_inner_at(areas: &Areas, pos: Position) -> Option<(Pane, Rect)> {
+    let (pane, rect) = areas.pane_at(pos.x, pos.y)?;
+    if !matches!(pane, Pane::Editor | Pane::Terminal)
+        || (pane == Pane::Terminal && areas.terminal_minimized)
+    {
+        return None;
+    }
+    let inner = layout::inner(rect);
+    inner.contains(pos).then_some((pane, inner))
+}
+
+fn relative(mouse: MouseEvent, inner: Rect) -> MouseEvent {
+    MouseEvent {
+        column: mouse.column - inner.x,
+        row: mouse.row - inner.y,
+        ..mouse
+    }
+}
+
+fn handle_mouse(state: &mut AppState, mouse: MouseEvent, fx: &mut Vec<Effect>) {
     let areas = layout::compute(Rect::new(0, 0, state.size.0, state.size.1), state);
     if areas.tier == Tier::TooSmall {
         return;
@@ -350,10 +826,17 @@ fn handle_mouse(state: &mut AppState, mouse: MouseEvent) {
     let pos = Position::new(mouse.column, mouse.row);
     match state.modal {
         Modal::None => match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => click(state, &areas, pos),
-            MouseEventKind::ScrollUp => wheel(state, &areas, pos, true),
-            MouseEventKind::ScrollDown => wheel(state, &areas, pos, false),
-            _ => {}
+            MouseEventKind::Down(MouseButton::Left) => click(state, &areas, pos, mouse, fx),
+            MouseEventKind::ScrollUp => wheel(state, &areas, pos, true, mouse, fx),
+            MouseEventKind::ScrollDown => wheel(state, &areas, pos, false, mouse, fx),
+            // Arrastres, otros botones y soltar: solo le interesan al programa del panel.
+            _ => {
+                if let Some((pane, inner)) = pane_inner_at(&areas, pos) {
+                    if !state.demo && pane == state.focus {
+                        pane_input(state, fx, PaneInput::Mouse(relative(mouse, inner)));
+                    }
+                }
+            }
         },
         // Un clic fuera del diálogo lo cierra; NewTask y Confirm no, para no perder lo escrito.
         Modal::Help => {
@@ -368,9 +851,15 @@ fn handle_mouse(state: &mut AppState, mouse: MouseEvent) {
     }
 }
 
-fn click(state: &mut AppState, areas: &Areas, pos: Position) {
+fn click(
+    state: &mut AppState,
+    areas: &Areas,
+    pos: Position,
+    mouse: MouseEvent,
+    fx: &mut Vec<Effect>,
+) {
     if let Some(tab) = areas.task_tabs.iter().find(|t| t.rect.contains(pos)) {
-        select_task(state, tab.index);
+        select_task(state, tab.index, fx);
         return;
     }
     if let Some((_, pane)) = areas.compact_tabs.iter().find(|(r, _)| r.contains(pos)) {
@@ -382,14 +871,19 @@ fn click(state: &mut AppState, areas: &Areas, pos: Position) {
     };
     state.focus = pane;
     match pane {
-        Pane::Explorer => click_explorer(state, rect, pos),
-        Pane::Agent => click_agent(state, rect, pos),
-        // Editor y terminal: en la app real el clic llegará al PTY.
-        Pane::Editor | Pane::Terminal => {}
+        Pane::Explorer => click_explorer(state, rect, pos, fx),
+        Pane::Agent => click_agent(state, rect, pos, fx),
+        Pane::Editor | Pane::Terminal => {
+            if let Some((_, inner)) = pane_inner_at(areas, pos) {
+                if !state.demo {
+                    pane_input(state, fx, PaneInput::Mouse(relative(mouse, inner)));
+                }
+            }
+        }
     }
 }
 
-fn click_explorer(state: &mut AppState, rect: Rect, pos: Position) {
+fn click_explorer(state: &mut AppState, rect: Rect, pos: Position, fx: &mut Vec<Effect>) {
     let inner = layout::inner(rect);
     if !inner.contains(pos) {
         return;
@@ -410,11 +904,11 @@ fn click_explorer(state: &mut AppState, rect: Rect, pos: Position) {
     task.explorer.selected = idx;
     if idx == selected {
         // Segundo clic sobre la fila seleccionada: como Enter.
-        explorer_key(state, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        explorer_key(state, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), fx);
     }
 }
 
-fn click_agent(state: &mut AppState, rect: Rect, pos: Position) {
+fn click_agent(state: &mut AppState, rect: Rect, pos: Position, fx: &mut Vec<Effect>) {
     let Some(task) = state.active_task() else {
         return;
     };
@@ -437,16 +931,36 @@ fn click_agent(state: &mut AppState, rect: Rect, pos: Position) {
         return;
     };
     if *selected == option {
-        agent_key(state, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        agent_key(state, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), fx);
     } else {
         *selected = option;
     }
 }
 
-fn wheel(state: &mut AppState, areas: &Areas, pos: Position, up: bool) {
+fn wheel(
+    state: &mut AppState,
+    areas: &Areas,
+    pos: Position,
+    up: bool,
+    mouse: MouseEvent,
+    fx: &mut Vec<Effect>,
+) {
     let Some((pane, rect)) = areas.pane_at(pos.x, pos.y) else {
         return;
     };
+    if matches!(pane, Pane::Editor | Pane::Terminal) {
+        // La rueda llega al programa (o al historial) del panel bajo el ratón.
+        if let (false, Some((pane, inner)), Some(name)) =
+            (state.demo, pane_inner_at(areas, pos), active_name(state))
+        {
+            fx.push(Effect::PaneInput(
+                name,
+                pane,
+                PaneInput::Wheel(relative(mouse, inner)),
+            ));
+        }
+        return;
+    }
     let ascii = state.ascii;
     let Some(task) = state.active_task_mut() else {
         return;
@@ -473,7 +987,6 @@ fn wheel(state: &mut AppState, areas: &Areas, pos: Position, up: bool) {
                 cur.saturating_sub(WHEEL_LINES)
             };
         }
-        // Editor y terminal: en la app real la rueda llegará al PTY.
         Pane::Editor | Pane::Terminal => {}
     }
 }
@@ -508,7 +1021,7 @@ fn review_mouse(state: &mut AppState, areas: &Areas, kind: MouseEventKind, pos: 
     }
 }
 
-fn new_task_key(state: &mut AppState, key: KeyEvent) {
+fn new_task_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
     let n_agents = state.agents.len().max(1);
     let Modal::NewTask {
         name,
@@ -541,13 +1054,19 @@ fn new_task_key(state: &mut AppState, key: KeyEvent) {
         },
         KeyCode::Enter => {
             let (name, idx, base) = (name.clone(), *agent_idx, base.clone());
-            create_task(state, &name, idx, &base);
+            create_task(state, &name, idx, &base, fx);
         }
         _ => {}
     }
 }
 
-fn create_task(state: &mut AppState, name: &str, agent_idx: usize, base: &str) {
+fn create_task(
+    state: &mut AppState,
+    name: &str,
+    agent_idx: usize,
+    base: &str,
+    fx: &mut Vec<Effect>,
+) {
     let error = if name.is_empty() {
         Some("El nombre de la tarea no puede estar vacío")
     } else if name.chars().any(|c| c.is_whitespace() || c == '/') {
@@ -568,6 +1087,17 @@ fn create_task(state: &mut AppState, name: &str, agent_idx: usize, base: &str) {
         .get(agent_idx)
         .cloned()
         .unwrap_or_else(|| "claude".to_string());
+    if !state.demo {
+        // El runtime crea el worktree y responde con `TaskCreated` o un aviso de error
+        // (el diálogo se cierra igualmente: el error dice qué corregir).
+        state.modal = Modal::None;
+        fx.push(Effect::CreateTask {
+            name: name.to_string(),
+            agent,
+            base: base.trim().to_string(),
+        });
+        return;
+    }
     let mut task = Task::new(name, &agent, base.trim());
     task.chat.push(ChatItem::Notice(
         "DEMO: tarea simulada, no se creó ningún worktree".to_string(),
@@ -579,9 +1109,10 @@ fn create_task(state: &mut AppState, name: &str, agent_idx: usize, base: &str) {
     state.push_toast(format!("Tarea {name} creada (DEMO)"), ToastLevel::Info);
 }
 
-fn review_key(state: &mut AppState, key: KeyEvent) {
+fn review_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
     let active = state.active;
-    let task_name = state.active_task().map(|t| t.name.clone());
+    let task_name = active_name(state);
+    let demo = state.demo;
     let Modal::Review { files, selected } = &mut state.modal else {
         return;
     };
@@ -613,13 +1144,24 @@ fn review_key(state: &mut AppState, key: KeyEvent) {
         }
         _ => return,
     };
-    state.push_toast(
-        format!("DEMO: no se ejecutó {action_name}"),
-        ToastLevel::Info,
-    );
+    if demo {
+        state.push_toast(
+            format!("DEMO: no se ejecutó {action_name}"),
+            ToastLevel::Info,
+        );
+        return;
+    }
+    let Some(name) = task_name else {
+        return;
+    };
+    fx.push(match key.code {
+        KeyCode::Char('c') => Effect::Commit(name),
+        KeyCode::Char('m') => Effect::Merge(name),
+        _ => Effect::PullRequest(name),
+    });
 }
 
-fn confirm_key(state: &mut AppState, key: KeyEvent) {
+fn confirm_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
     let Modal::Confirm { action, .. } = state.modal else {
         return;
     };
@@ -627,7 +1169,7 @@ fn confirm_key(state: &mut AppState, key: KeyEvent) {
         KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Enter => {
             state.modal = Modal::None;
             match action {
-                ConfirmAction::DiscardTask(idx) => discard_task(state, idx),
+                ConfirmAction::DiscardTask(idx) => discard_task(state, idx, fx),
             }
         }
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.modal = Modal::None,
@@ -635,15 +1177,24 @@ fn confirm_key(state: &mut AppState, key: KeyEvent) {
     }
 }
 
-fn discard_task(state: &mut AppState, idx: usize) {
+fn discard_task(state: &mut AppState, idx: usize, fx: &mut Vec<Effect>) {
     if idx >= state.tasks.len() {
         return;
     }
-    let removed = state.tasks.remove(idx);
-    state.push_toast(
-        format!("Tarea {} descartada (DEMO)", removed.name),
-        ToastLevel::Info,
-    );
+    if !state.demo {
+        // El runtime borra worktree y rama, y responde con `TaskRemoved`.
+        fx.push(Effect::RemoveTask(state.tasks[idx].name.clone()));
+        return;
+    }
+    let name = state.tasks[idx].name.clone();
+    remove_task_at(state, idx, fx);
+    state.push_toast(format!("Tarea {name} descartada (DEMO)"), ToastLevel::Info);
+}
+
+/// Quita la tarea `idx` de la lista y reajusta la tarea activa.
+fn remove_task_at(state: &mut AppState, idx: usize, fx: &mut Vec<Effect>) {
+    let was_active = idx == state.active;
+    state.tasks.remove(idx);
     if state.tasks.is_empty() {
         state.active = 0;
         open_new_task(state);
@@ -653,6 +1204,9 @@ fn discard_task(state: &mut AppState, idx: usize) {
         state.active -= 1;
     }
     state.active = state.active.min(state.tasks.len() - 1);
+    if was_active && !state.demo {
+        fx.push(Effect::Activate(state.tasks[state.active].name.clone()));
+    }
 }
 
 #[cfg(test)]
@@ -1768,5 +2322,399 @@ mod mouse_tests {
             update(&mut s, mouse(kind, x, y));
         }
         assert_eq!(s, before);
+    }
+}
+
+/// Comportamiento de la app real: `update` emite efectos y aplica los eventos del runtime.
+#[cfg(test)]
+mod real_tests {
+    use super::*;
+    use crate::demo::demo_state;
+    use crate::layout;
+    use crate::state::FileEntry;
+    use qorvi_acp::{
+        Cost, Mode, Modes, PermissionKind, PermissionOption, PermissionRequest, SessionReady,
+        ToolCallInfo, ToolCallPatch, Usage,
+    };
+
+    fn real() -> AppState {
+        let mut s = demo_state();
+        s.demo = false;
+        s.active = 0;
+        s.focus = Pane::Agent;
+        s.tasks[0].status = AgentStatus::Idle;
+        s.tasks[0].input.clear();
+        s
+    }
+
+    fn key(code: KeyCode) -> Action {
+        Action::Key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    fn ev(s: &mut AppState, name: &str, e: AgentEvent) -> Vec<Effect> {
+        update(s, Action::Agent(name.to_string(), e))
+    }
+
+    fn type_and_send(s: &mut AppState, text: &str) -> Vec<Effect> {
+        for c in text.chars() {
+            update(s, key(KeyCode::Char(c)));
+        }
+        update(s, key(KeyCode::Enter))
+    }
+
+    #[test]
+    fn prompt_emite_efecto_y_bloquea_otro_mientras_trabaja() {
+        let mut s = real();
+        let fx = type_and_send(&mut s, "hola");
+        assert_eq!(fx, vec![Effect::Prompt("APP-12".into(), "hola".into())]);
+        assert_eq!(s.tasks[0].status, AgentStatus::Working);
+        assert_eq!(s.tasks[0].chat.last(), Some(&ChatItem::User("hola".into())));
+        // Mientras trabaja, el texto se queda en la caja y se avisa.
+        let fx = type_and_send(&mut s, "otra");
+        assert!(fx.is_empty());
+        assert_eq!(s.tasks[0].input, "otra");
+        // Esc cancela.
+        assert_eq!(
+            update(&mut s, key(KeyCode::Esc)),
+            vec![Effect::Cancel("APP-12".into())]
+        );
+    }
+
+    #[test]
+    fn trozos_se_acumulan_y_las_herramientas_se_actualizan() {
+        let mut s = real();
+        s.tasks[0].chat.clear();
+        ev(&mut s, "APP-12", AgentEvent::MessageChunk("Hola, ".into()));
+        ev(&mut s, "APP-12", AgentEvent::MessageChunk("mundo".into()));
+        ev(
+            &mut s,
+            "APP-12",
+            AgentEvent::ToolCall(ToolCallInfo {
+                id: "t1".into(),
+                title: "Leer".into(),
+                kind: "read".into(),
+                status: qorvi_acp::ToolStatus::Pending,
+                diffs: vec![],
+                text: vec![],
+            }),
+        );
+        ev(
+            &mut s,
+            "APP-12",
+            AgentEvent::ToolCallUpdate(ToolCallPatch {
+                id: "t1".into(),
+                title: Some("Leer a.rs".into()),
+                kind: None,
+                status: Some(qorvi_acp::ToolStatus::Completed),
+                diffs: None,
+                text: None,
+            }),
+        );
+        ev(&mut s, "APP-12", AgentEvent::MessageChunk("fin".into()));
+        let chat = &s.tasks[0].chat;
+        assert_eq!(chat[0], ChatItem::Agent("Hola, mundo".into()));
+        assert!(
+            matches!(&chat[1], ChatItem::ToolCall { title, status: ToolStatus::Completed, .. } if title == "Leer a.rs")
+        );
+        assert_eq!(chat[2], ChatItem::Agent("fin".into()));
+    }
+
+    fn permission(id: u64) -> AgentEvent {
+        AgentEvent::PermissionRequest(PermissionRequest {
+            id,
+            tool_call_id: "t".into(),
+            title: "Ejecutar ls".into(),
+            options: vec![
+                PermissionOption {
+                    id: "ok".into(),
+                    name: "Permitir".into(),
+                    kind: PermissionKind::AllowOnce,
+                },
+                PermissionOption {
+                    id: "no".into(),
+                    name: "Rechazar".into(),
+                    kind: PermissionKind::RejectOnce,
+                },
+            ],
+        })
+    }
+
+    #[test]
+    fn permiso_se_responde_con_el_id_de_la_opcion() {
+        let mut s = real();
+        s.tasks[0].status = AgentStatus::Working;
+        ev(&mut s, "APP-12", permission(7));
+        assert_eq!(s.tasks[0].status, AgentStatus::NeedsPermission);
+        update(&mut s, key(KeyCode::Down));
+        let fx = update(&mut s, key(KeyCode::Enter));
+        assert_eq!(
+            fx,
+            vec![Effect::Permission("APP-12".into(), 7, Some("no".into()))]
+        );
+        assert_eq!(s.tasks[0].status, AgentStatus::Working);
+    }
+
+    #[test]
+    fn permiso_cancelado_queda_descartado() {
+        let mut s = real();
+        ev(&mut s, "APP-12", permission(3));
+        ev(&mut s, "APP-12", AgentEvent::PermissionCancelled(3));
+        assert!(matches!(
+            s.tasks[0].chat.last(),
+            Some(ChatItem::Permission {
+                resolved: Some(2),
+                ..
+            })
+        ));
+        // Enter ya no responde a nada: con la caja vacía no emite efectos.
+        assert!(update(&mut s, key(KeyCode::Enter)).is_empty());
+    }
+
+    #[test]
+    fn tarea_en_segundo_plano_avisa_y_queda_lista() {
+        let mut s = real();
+        s.tasks[1].status = AgentStatus::Working;
+        let name = s.tasks[1].name.clone();
+        let fx = ev(&mut s, &name, AgentEvent::TurnEnded(StopReason::EndTurn));
+        assert_eq!(fx, vec![Effect::RefreshFiles(name.clone())]);
+        assert_eq!(s.tasks[1].status, AgentStatus::Done);
+        assert!(s.toasts.iter().any(|t| t.text.contains(&name)));
+        // Un permiso en segundo plano también avisa.
+        s.toasts.clear();
+        ev(&mut s, &name, permission(1));
+        assert_eq!(s.toasts[0].level, ToastLevel::Warning);
+        // La tarea activa no avisa al terminar y queda inactiva.
+        s.toasts.clear();
+        s.tasks[0].status = AgentStatus::Working;
+        ev(
+            &mut s,
+            "APP-12",
+            AgentEvent::TurnEnded(StopReason::Cancelled),
+        );
+        assert_eq!(s.tasks[0].status, AgentStatus::Idle);
+        assert!(s.toasts.is_empty());
+        assert_eq!(
+            s.tasks[0].chat.last(),
+            Some(&ChatItem::Notice("Turno cancelado".into()))
+        );
+    }
+
+    #[test]
+    fn sesion_coste_y_titulo_se_registran() {
+        let mut s = real();
+        s.tasks[0].status = AgentStatus::Connecting;
+        let fx = ev(
+            &mut s,
+            "APP-12",
+            AgentEvent::Ready(SessionReady {
+                session_id: "s1".into(),
+                resumed: true,
+                agent: None,
+                modes: Some(Modes {
+                    current: "default".into(),
+                    available: vec![
+                        Mode {
+                            id: "default".into(),
+                            name: "Preguntar".into(),
+                            description: None,
+                        },
+                        Mode {
+                            id: "plan".into(),
+                            name: "Planificar".into(),
+                            description: None,
+                        },
+                    ],
+                }),
+            }),
+        );
+        assert_eq!(s.tasks[0].status, AgentStatus::Idle);
+        assert!(
+            matches!(&fx[0], Effect::RecordSession(n, i) if n == "APP-12" && i.session_id.as_deref() == Some("s1"))
+        );
+        let fx = ev(
+            &mut s,
+            "APP-12",
+            AgentEvent::Usage(Usage {
+                used: 1,
+                size: 2,
+                cost: Some(Cost {
+                    amount: 1.5,
+                    currency: "USD".into(),
+                }),
+            }),
+        );
+        assert_eq!(s.tasks[0].cost_usd, 1.5);
+        assert!(
+            matches!(&fx[0], Effect::RecordSession(_, i) if i.cost.as_ref().is_some_and(|c| c.amount == 1.5))
+        );
+        let fx = ev(&mut s, "APP-12", AgentEvent::Title(Some("Login".into())));
+        assert_eq!(s.tasks[0].title.as_deref(), Some("Login"));
+        assert!(
+            matches!(&fx[0], Effect::RecordSession(_, i) if i.title == Some(Some("Login".into())))
+        );
+        // Shift+Tab pasa al siguiente modo.
+        assert_eq!(
+            update(&mut s, key(KeyCode::BackTab)),
+            vec![Effect::SetMode("APP-12".into(), "plan".into())]
+        );
+        ev(&mut s, "APP-12", AgentEvent::ModeChanged("plan".into()));
+        assert_eq!(s.tasks[0].mode.as_deref(), Some("plan"));
+    }
+
+    #[test]
+    fn agente_que_se_cierra_con_error() {
+        let mut s = real();
+        ev(&mut s, "APP-12", permission(1));
+        ev(
+            &mut s,
+            "APP-12",
+            AgentEvent::Exited {
+                code: Some(1),
+                error: Some("adiós".into()),
+            },
+        );
+        assert_eq!(s.tasks[0].status, AgentStatus::Error);
+        assert!(last_unresolved_permission(&s.tasks[0]).is_none());
+    }
+
+    #[test]
+    fn teclas_del_editor_van_al_panel_o_reinician() {
+        let mut s = real();
+        s.focus = Pane::Editor;
+        let k = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
+        assert_eq!(
+            update(&mut s, Action::Key(k)),
+            vec![Effect::PaneInput(
+                "APP-12".into(),
+                Pane::Editor,
+                PaneInput::Key(k)
+            )]
+        );
+        s.tasks[0].editor_note = Some("nvim terminó".into());
+        assert!(update(&mut s, Action::Key(k)).is_empty());
+        assert_eq!(
+            update(&mut s, key(KeyCode::Enter)),
+            vec![Effect::RestartPane("APP-12".into(), Pane::Editor)]
+        );
+        // Ctrl+Space dos veces envía NUL al panel.
+        s.tasks[0].editor_note = None;
+        assert_eq!(
+            update(&mut s, Action::PrefixLiteral),
+            vec![Effect::PaneInput(
+                "APP-12".into(),
+                Pane::Editor,
+                PaneInput::Bytes(vec![0])
+            )]
+        );
+    }
+
+    #[test]
+    fn clic_y_rueda_en_el_editor_llegan_con_coordenadas_relativas() {
+        let mut s = real();
+        s.size = (140, 40);
+        s.set_layout(false, true);
+        let areas = layout::compute(Rect::new(0, 0, 140, 40), &s);
+        let inner = layout::inner(areas.editor.unwrap());
+        let m = |kind| MouseEvent {
+            kind,
+            column: inner.x + 2,
+            row: inner.y + 1,
+            modifiers: KeyModifiers::NONE,
+        };
+        let fx = update(
+            &mut s,
+            Action::Mouse(m(MouseEventKind::Down(MouseButton::Left))),
+        );
+        assert_eq!(s.focus, Pane::Editor);
+        assert!(
+            matches!(&fx[..], [Effect::PaneInput(_, Pane::Editor, PaneInput::Mouse(e))] if e.column == 2 && e.row == 1)
+        );
+        let fx = update(&mut s, Action::Mouse(m(MouseEventKind::ScrollUp)));
+        assert!(matches!(
+            &fx[..],
+            [Effect::PaneInput(_, Pane::Editor, PaneInput::Wheel(_))]
+        ));
+    }
+
+    #[test]
+    fn seleccionar_crear_y_borrar_tareas() {
+        let mut s = real();
+        assert_eq!(
+            update(&mut s, Action::SelectTask(1)),
+            vec![Effect::Activate(s.tasks[1].name.clone())]
+        );
+        update(&mut s, Action::NewTask);
+        let fx = type_and_send(&mut s, "nueva");
+        assert_eq!(
+            fx,
+            vec![Effect::CreateTask {
+                name: "nueva".into(),
+                agent: "claude".into(),
+                base: "main".into()
+            }]
+        );
+        assert_eq!(s.modal, Modal::None);
+        let fx = update(
+            &mut s,
+            Action::TaskCreated(
+                Box::new(Task::new("nueva", "claude", "main")),
+                vec!["ojo".into()],
+            ),
+        );
+        assert_eq!(fx, vec![Effect::Activate("nueva".into())]);
+        assert_eq!(s.active_task().unwrap().name, "nueva");
+        assert!(s.toasts.iter().any(|t| t.text == "ojo"));
+
+        // Review → descartar → confirmar pide el borrado; TaskRemoved lo aplica.
+        let fx = update(&mut s, Action::OpenReview);
+        assert_eq!(fx, vec![Effect::LoadReview("nueva".into())]);
+        update(&mut s, Action::ReviewLoaded("nueva".into(), vec![]));
+        assert!(matches!(s.modal, Modal::Review { .. }));
+        assert_eq!(
+            update(&mut s, key(KeyCode::Char('m'))),
+            vec![Effect::Merge("nueva".into())]
+        );
+        update(&mut s, key(KeyCode::Char('x')));
+        assert_eq!(
+            update(&mut s, key(KeyCode::Enter)),
+            vec![Effect::RemoveTask("nueva".into())]
+        );
+        let n = s.tasks.len();
+        let fx = update(&mut s, Action::TaskRemoved("nueva".into()));
+        assert_eq!(s.tasks.len(), n - 1);
+        assert_eq!(
+            fx,
+            vec![Effect::Activate(s.active_task().unwrap().name.clone())]
+        );
+    }
+
+    #[test]
+    fn pegar_y_explorador() {
+        let mut s = real();
+        update(&mut s, Action::Paste("línea 1\r\nlínea 2".into()));
+        assert_eq!(s.tasks[0].input, "línea 1\nlínea 2");
+        s.focus = Pane::Explorer;
+        s.tasks[0].files = vec![FileEntry {
+            path: "a.rs".into(),
+            mark: None,
+        }];
+        s.tasks[0].explorer.selected = 0;
+        assert_eq!(
+            update(&mut s, key(KeyCode::Enter)),
+            vec![Effect::OpenFile("APP-12".into(), "a.rs".into())]
+        );
+        assert_eq!(s.focus, Pane::Editor);
+        s.focus = Pane::Explorer;
+        assert_eq!(
+            update(&mut s, key(KeyCode::Char('r'))),
+            vec![Effect::RefreshFiles("APP-12".into())]
+        );
+    }
+
+    #[test]
+    fn f5_solo_en_la_demo() {
+        let s = real();
+        let a = crate::keymap::map_key(&s, KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE));
+        assert!(!matches!(a, Action::DemoSetStatus(_)));
     }
 }
