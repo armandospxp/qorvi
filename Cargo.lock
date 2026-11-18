@@ -1634,10 +1634,12 @@ name = "qorvi-acp"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
+ "libc",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+ "windows-sys",
 ]
 
 [[package]]

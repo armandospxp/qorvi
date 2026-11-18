@@ -553,3 +553,60 @@ fn agente_que_sale_al_arrancar() {
         other => panic!("esperaba Exited, llegó {other:?} ({evs:?})"),
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn al_cerrarse_mueren_tambien_los_nietos() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pidfile = tmp.path().join("nieto.pid");
+    let cmd = qorvi_acp::AgentCommand {
+        program: "sh".into(),
+        // Un envoltorio que deja un nieto vivo y sale (como `npx` que muere antes que `node`).
+        args: vec![
+            "-c".into(),
+            format!(
+                "sleep 300 & echo $! > '{}'; sleep 0.2; exit 0",
+                pidfile.display()
+            ),
+        ],
+        ..Default::default()
+    };
+    let (tx, rx) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    let _h = AgentHandle::spawn(
+        &cmd,
+        SessionSpec {
+            cwd: tmp.path().to_path_buf(),
+            ..Default::default()
+        },
+        move |ev| {
+            let _ = tx.lock().unwrap().send(ev);
+        },
+    )
+    .unwrap();
+    loop {
+        match rx.recv_timeout(TIMEOUT) {
+            Ok(AgentEvent::Exited { .. }) => break,
+            Ok(_) => {}
+            Err(e) => panic!("sin Exited: {e}"),
+        }
+    }
+    let pid: i32 = std::fs::read_to_string(&pidfile)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    // El nieto recibe la señal antes de `Exited`; puede tardar un instante en desaparecer.
+    let vivo = || {
+        std::path::Path::new(&format!("/proc/{pid}")).exists()
+            || std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .is_ok_and(|s| s.success())
+    };
+    let t0 = std::time::Instant::now();
+    while vivo() && t0.elapsed() < Duration::from_secs(3) {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(!vivo(), "el nieto {pid} sigue vivo");
+}

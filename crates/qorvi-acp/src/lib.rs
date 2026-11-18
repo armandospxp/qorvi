@@ -8,6 +8,7 @@
 mod client;
 mod event;
 pub mod fs;
+mod proc;
 
 pub use client::{AgentCommand, AgentHandle, Error, EventSink, SessionSpec};
 pub use event::{
