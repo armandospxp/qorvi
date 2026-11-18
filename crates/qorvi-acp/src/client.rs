@@ -7,7 +7,7 @@
 //! Los permisos nunca bloquean: la petición del agente se guarda con un id y se emite un
 //! evento; la conexión sigue atendiendo notificaciones hasta que el usuario responde.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -124,11 +124,17 @@ impl AgentHandle {
         let sink: EventSink = Arc::new(sink);
         Self::start(rt, sink.clone(), move |cmds, busy| async move {
             let stderr_sink = sink.clone();
-            tokio::spawn(async move {
+            let stderr_task = tokio::spawn(async move {
+                let mut tail = VecDeque::new();
                 let mut lines = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
+                    if tail.len() == STDERR_TAIL {
+                        tail.pop_front();
+                    }
+                    tail.push_back(line.clone());
                     stderr_sink(AgentEvent::Stderr(line));
                 }
+                tail
             });
             let conn = run(stdout, stdin, session, sink, cmds, busy);
             let exited = tokio::select! {
@@ -159,7 +165,24 @@ impl AgentHandle {
             };
             // Lo que quede del árbol (nietos lanzados por el agente) también se cierra.
             tree.kill().await;
-            exited
+            match exited {
+                AgentEvent::Exited {
+                    code,
+                    error: Some(error),
+                } => {
+                    // El motivo real de un fallo suele estar en el stderr del agente.
+                    let tail = tokio::time::timeout(Duration::from_millis(500), stderr_task)
+                        .await
+                        .ok()
+                        .and_then(Result::ok)
+                        .unwrap_or_default();
+                    AgentEvent::Exited {
+                        code,
+                        error: Some(with_stderr(error, code, tail)),
+                    }
+                }
+                other => other,
+            }
         })
     }
 
@@ -267,6 +290,29 @@ impl Drop for AgentHandle {
         // Sin esperar al hilo: cierra la conexión y mata al agente si no sale.
         let _ = self.tx.send(Cmd::Shutdown);
     }
+}
+
+/// Líneas finales del stderr del agente que acompañan al motivo de un cierre con error.
+const STDERR_TAIL: usize = 12;
+
+/// Motivo de un cierre con error, con el código de salida y el final del stderr.
+fn with_stderr(error: String, code: Option<i32>, tail: VecDeque<String>) -> String {
+    let mut out = error;
+    if let Some(c) = code.filter(|c| *c != 0) {
+        if !out.contains("código") {
+            out.push_str(&format!(" (código {c})"));
+        }
+    }
+    let lines: Vec<&str> = tail
+        .iter()
+        .map(|l| l.trim_end())
+        .skip_while(|l| l.is_empty())
+        .collect();
+    if !lines.is_empty() {
+        out.push_str("\nstderr del agente:\n");
+        out.push_str(&lines.join("\n"));
+    }
+    out
 }
 
 fn runtime() -> Result<tokio::runtime::Runtime, Error> {

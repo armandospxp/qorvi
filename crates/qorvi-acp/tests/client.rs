@@ -548,7 +548,9 @@ fn agente_que_sale_al_arrancar() {
     match evs.last() {
         Some(AgentEvent::Exited { code, error }) => {
             assert_eq!(*code, Some(3), "{evs:?}");
-            assert!(error.is_some());
+            let error = error.as_deref().unwrap();
+            assert!(error.contains("código 3"), "{error}");
+            assert!(error.ends_with("stderr del agente:\nadios"), "{error}");
         }
         other => panic!("esperaba Exited, llegó {other:?} ({evs:?})"),
     }
