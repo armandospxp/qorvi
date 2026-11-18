@@ -48,6 +48,8 @@ pub enum Effect {
     RecordSession(String, SessionInfo),
     PaneInput(String, Pane, PaneInput),
     RestartPane(String, Pane),
+    /// Guardar el historial del chat de la tarea.
+    SaveChat(String),
 }
 
 pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
@@ -135,6 +137,7 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
         Action::AgentStarting(name) => {
             if let Some(t) = task_mut(state, &name) {
                 t.status = AgentStatus::Connecting;
+                t.replaying = !t.chat.is_empty();
             }
         }
         Action::AgentFailed(name, msg) => {
@@ -678,8 +681,23 @@ fn agent_event(state: &mut AppState, name: &str, ev: AgentEvent, fx: &mut Vec<Ef
     };
     let mut toast: Option<(String, ToastLevel)> = None;
     let session = |info: SessionInfo| Effect::RecordSession(name.to_string(), info);
+    // Repetición del historial al reanudar con el chat ya cargado de disco: se ignora.
+    if task.replaying
+        && matches!(
+            ev,
+            AgentEvent::UserChunk(_)
+                | AgentEvent::MessageChunk(_)
+                | AgentEvent::ThoughtChunk(_)
+                | AgentEvent::ToolCall(_)
+                | AgentEvent::ToolCallUpdate(_)
+                | AgentEvent::Plan(_)
+        )
+    {
+        return;
+    }
     match ev {
         AgentEvent::Ready(r) => {
+            task.replaying = false;
             if matches!(
                 task.status,
                 AgentStatus::Connecting | AgentStatus::Disconnected | AgentStatus::Error
@@ -811,8 +829,10 @@ fn agent_event(state: &mut AppState, name: &str, ev: AgentEvent, fx: &mut Vec<Ef
                 AgentStatus::Done
             };
             fx.push(Effect::RefreshFiles(name.to_string()));
+            fx.push(Effect::SaveChat(name.to_string()));
         }
         AgentEvent::TurnFailed(msg) => {
+            fx.push(Effect::SaveChat(name.to_string()));
             discard_permissions(task, None);
             task.status = AgentStatus::Error;
             task.chat
@@ -854,6 +874,8 @@ fn agent_event(state: &mut AppState, name: &str, ev: AgentEvent, fx: &mut Vec<Ef
         ))),
         AgentEvent::Notice(n) => task.chat.push(ChatItem::Notice(n)),
         AgentEvent::Exited { error, .. } => {
+            task.replaying = false;
+            fx.push(Effect::SaveChat(name.to_string()));
             discard_permissions(task, None);
             match error {
                 Some(e) => {
@@ -2566,7 +2588,13 @@ mod real_tests {
         s.tasks[1].status = AgentStatus::Working;
         let name = s.tasks[1].name.clone();
         let fx = ev(&mut s, &name, AgentEvent::TurnEnded(StopReason::EndTurn));
-        assert_eq!(fx, vec![Effect::RefreshFiles(name.clone())]);
+        assert_eq!(
+            fx,
+            vec![
+                Effect::RefreshFiles(name.clone()),
+                Effect::SaveChat(name.clone())
+            ]
+        );
         assert_eq!(s.tasks[1].status, AgentStatus::Done);
         assert!(s.toasts.iter().any(|t| t.text.contains(&name)));
         // Un permiso en segundo plano también avisa.
@@ -2971,5 +2999,54 @@ mod plan_tests {
         assert!(text.iter().any(|l| l.contains("cinco")));
         assert!(!text.iter().any(|l| l.contains("uno")));
         assert!(text.iter().any(|l| l.contains("✓ paso")));
+    }
+}
+
+#[cfg(test)]
+mod replay_tests {
+    use super::*;
+    use crate::demo::demo_state;
+
+    #[test]
+    fn la_repeticion_del_historial_se_ignora_si_el_chat_vino_de_disco() {
+        let mut s = demo_state();
+        s.demo = false;
+        let name = s.tasks[0].name.clone();
+        s.tasks[0].chat = vec![ChatItem::User("antes".into())];
+        update(&mut s, Action::AgentStarting(name.clone()));
+        update(
+            &mut s,
+            Action::Agent(name.clone(), AgentEvent::UserChunk("antes".into())),
+        );
+        update(
+            &mut s,
+            Action::Agent(
+                name.clone(),
+                AgentEvent::Ready(qorvi_acp::SessionReady {
+                    session_id: "s".into(),
+                    resumed: true,
+                    agent: None,
+                    modes: None,
+                }),
+            ),
+        );
+        update(
+            &mut s,
+            Action::Agent(name.clone(), AgentEvent::MessageChunk("nuevo".into())),
+        );
+        assert_eq!(
+            s.tasks[0].chat,
+            vec![
+                ChatItem::User("antes".into()),
+                ChatItem::Notice("Sesión reanudada".into()),
+                ChatItem::Agent("nuevo".into()),
+            ]
+        );
+        // Sin chat guardado, la repetición sí reconstruye el historial.
+        s.tasks[1].chat.clear();
+        let n1 = s.tasks[1].name.clone();
+        update(&mut s, Action::AgentStarting(n1.clone()));
+        update(&mut s, Action::Agent(n1, AgentEvent::UserChunk("x".into())));
+        assert_eq!(s.tasks[1].chat, vec![ChatItem::User("x".into())]);
     }
 }

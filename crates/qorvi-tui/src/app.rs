@@ -27,7 +27,8 @@ use crate::action::{Action, PaneInput};
 use crate::keymap;
 use crate::layout;
 use crate::state::{
-    AgentStatus, AppState, ChangeKind, ChangeMark, ChangedFile, FileEntry, Pane, Task, ToastLevel,
+    AgentStatus, AppState, ChangeKind, ChangeMark, ChangedFile, ChatItem, FileEntry, Pane, Task,
+    ToastLevel,
 };
 use crate::update::{update, Effect};
 use crate::view::{self, term::draw_screen, term::Screens, Tier};
@@ -91,7 +92,15 @@ pub fn initial_state(ws: &Workspace) -> qorvi_core::Result<AppState> {
         .and_then(|e| e.split_whitespace().next().map(program_name))
         .unwrap_or_else(|| "editor".to_string());
     let shell_name = program_name(&config.shell_command());
-    let tasks: Vec<Task> = ws.tasks()?.iter().map(ui_task).collect();
+    let tasks: Vec<Task> = ws
+        .tasks()?
+        .iter()
+        .map(|t| {
+            let mut ui = ui_task(t);
+            ui.chat = load_chat(&ws.paths().chat_file(t.name.as_str()));
+            ui
+        })
+        .collect();
     let mut state = crate::demo::demo_state();
     state.demo = false;
     state.tasks = tasks;
@@ -158,6 +167,9 @@ pub fn run(terminal: &mut DefaultTerminal, mut state: AppState, ws: Workspace) -
         queue.push_back(Action::NewTask);
     }
     let result = event_loop(terminal, &mut state, &mut rt, &rx, &mut queue);
+    for t in &state.tasks {
+        let _ = save_chat(&rt.ws.paths().chat_file(&t.name), &t.chat);
+    }
     rt.shutdown();
     result
 }
@@ -509,6 +521,18 @@ impl Runtime {
                 // Si el programa ya terminó, el aviso llega por su evento `Exited`.
                 drop(r);
             }
+            Effect::SaveChat(name) => {
+                let Some(t) = state.tasks.iter().find(|t| t.name == name) else {
+                    return;
+                };
+                if let Err(e) = save_chat(&self.ws.paths().chat_file(&name), &t.chat) {
+                    toast(
+                        queue,
+                        format!("No se guardó el chat de {name}: {e}"),
+                        ToastLevel::Warning,
+                    );
+                }
+            }
             Effect::RestartPane(name, pane) => {
                 queue.push_back(Action::PaneNote(name.clone(), pane, None));
                 self.spawn_pane(&name, pane, state, queue);
@@ -824,6 +848,48 @@ fn pull_request(task: &CoreTask, title: &str) -> Result<String, String> {
     Ok(format!("PR creado: {url}"))
 }
 
+/// Mensajes del chat que se guardan por tarea (los más recientes).
+const MAX_CHAT_ITEMS: usize = 500;
+
+/// Historial guardado de una tarea; vacío si no hay o no se puede leer. Los permisos
+/// que quedaron sin responder ya no tienen a quién responder: se marcan como descartados.
+pub fn load_chat(path: &Path) -> Vec<ChatItem> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut chat: Vec<ChatItem> = serde_json::from_str(&text).unwrap_or_default();
+    for item in &mut chat {
+        if let ChatItem::Permission {
+            options,
+            resolved,
+            request,
+            ..
+        } = item
+        {
+            *request = None;
+            if resolved.is_none() {
+                *resolved = Some(options.len());
+            }
+        }
+    }
+    chat
+}
+
+/// Guarda el historial (los últimos [`MAX_CHAT_ITEMS`]) con escritura atómica.
+pub fn save_chat(path: &Path, chat: &[ChatItem]) -> io::Result<()> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| io::Error::other("ruta sin directorio"))?;
+    std::fs::create_dir_all(dir)?;
+    let start = chat.len().saturating_sub(MAX_CHAT_ITEMS);
+    let json = serde_json::to_vec(&chat[start..]).map_err(io::Error::other)?;
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, path)
+}
+
 fn short(sha: &str) -> &str {
     &sha[..sha.len().min(8)]
 }
@@ -926,6 +992,49 @@ mod tests {
         assert_eq!(get("b.txt"), Some(Some(ChangeMark::Deleted)));
         assert_eq!(get("nuevo.txt"), Some(Some(ChangeMark::Untracked)));
         assert_eq!(get("src/c.rs"), Some(None));
+    }
+
+    #[test]
+    fn chat_se_guarda_y_se_recupera() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("chats/t.json");
+        assert!(load_chat(&path).is_empty());
+        let chat = vec![
+            ChatItem::User("hola".into()),
+            ChatItem::Agent("¿qué tal?".into()),
+            ChatItem::Permission {
+                title: "ls".into(),
+                options: vec!["Sí".into(), "No".into()],
+                selected: 0,
+                resolved: None,
+                request: Some(crate::state::PermissionRef {
+                    id: 3,
+                    option_ids: vec!["si".into(), "no".into()],
+                }),
+            },
+        ];
+        save_chat(&path, &chat).unwrap();
+        let back = load_chat(&path);
+        assert_eq!(back[..2], chat[..2]);
+        // El permiso pendiente vuelve descartado y sin petición.
+        assert!(matches!(
+            &back[2],
+            ChatItem::Permission {
+                resolved: Some(2),
+                request: None,
+                ..
+            }
+        ));
+        // Solo se guardan los últimos MAX_CHAT_ITEMS; un archivo roto da un chat vacío.
+        let long: Vec<ChatItem> = (0..MAX_CHAT_ITEMS + 10)
+            .map(|i| ChatItem::Notice(i.to_string()))
+            .collect();
+        save_chat(&path, &long).unwrap();
+        let back = load_chat(&path);
+        assert_eq!(back.len(), MAX_CHAT_ITEMS);
+        assert_eq!(back[0], ChatItem::Notice("10".into()));
+        std::fs::write(&path, "{roto").unwrap();
+        assert!(load_chat(&path).is_empty());
     }
 
     #[test]

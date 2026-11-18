@@ -1675,6 +1675,8 @@ dependencies = [
  "qorvi-core",
  "qorvi-pty",
  "ratatui",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 
