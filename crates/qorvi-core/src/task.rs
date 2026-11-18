@@ -121,6 +121,47 @@ pub struct Task {
     /// Título de sesión que da el agente.
     #[serde(default)]
     pub title: Option<String>,
+    /// Coste acumulado de la sesión, según el agente.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<SessionCost>,
+}
+
+/// Coste de una sesión en la moneda que indique el agente.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionCost {
+    pub amount: f64,
+    pub currency: String,
+}
+
+// `f64` no es `Eq`, pero un coste nunca es NaN (viene de JSON).
+impl Eq for SessionCost {}
+
+/// Cambios de sesión que informa el agente; `None` = sin cambio.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionInfo {
+    pub session_id: Option<String>,
+    /// `Some(None)` borra el título.
+    pub title: Option<Option<String>>,
+    pub cost: Option<SessionCost>,
+}
+
+impl Task {
+    /// Aplica `info`. Si cambia la sesión, el título y el coste anteriores se descartan.
+    pub fn apply_session(&mut self, info: SessionInfo) {
+        if let Some(id) = info.session_id {
+            if self.session_id.as_deref() != Some(id.as_str()) {
+                self.title = None;
+                self.cost = None;
+            }
+            self.session_id = Some(id);
+        }
+        if let Some(title) = info.title {
+            self.title = title;
+        }
+        if let Some(cost) = info.cost {
+            self.cost = Some(cost);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -183,6 +224,75 @@ mod tests {
         assert_eq!(n.to_string(), "mi-tarea");
         assert_eq!(n.as_ref(), "mi-tarea");
         assert!("-no".parse::<TaskName>().is_err());
+    }
+
+    fn tarea() -> Task {
+        Task {
+            name: TaskName::new("t").unwrap(),
+            branch: "t".into(),
+            base_ref: "main".into(),
+            base_commit: "abc".into(),
+            worktree: PathBuf::from("/wt/t"),
+            agent: "a".into(),
+            created_at: 0,
+            session_id: None,
+            title: None,
+            cost: None,
+        }
+    }
+
+    #[test]
+    fn aplicar_info_de_sesion() {
+        let usd = |amount| SessionCost {
+            amount,
+            currency: "USD".into(),
+        };
+        let mut t = tarea();
+        t.apply_session(SessionInfo {
+            session_id: Some("s1".into()),
+            ..Default::default()
+        });
+        t.apply_session(SessionInfo {
+            title: Some(Some("Arreglar login".into())),
+            cost: Some(usd(0.5)),
+            ..Default::default()
+        });
+        assert_eq!(t.title.as_deref(), Some("Arreglar login"));
+        // Misma sesión (reanudada): se conservan título y coste.
+        t.apply_session(SessionInfo {
+            session_id: Some("s1".into()),
+            ..Default::default()
+        });
+        assert_eq!(t.cost, Some(usd(0.5)));
+        // Sesión nueva: se descartan.
+        t.apply_session(SessionInfo {
+            session_id: Some("s2".into()),
+            ..Default::default()
+        });
+        assert_eq!((t.title.clone(), t.cost.clone()), (None, None));
+        t.apply_session(SessionInfo {
+            title: Some(Some("x".into())),
+            ..Default::default()
+        });
+        t.apply_session(SessionInfo {
+            title: Some(None),
+            ..Default::default()
+        });
+        assert_eq!(t.title, None);
+    }
+
+    #[test]
+    fn coste_opcional_en_json() {
+        let t = tarea();
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("cost"));
+        let mut con = t.clone();
+        con.cost = Some(SessionCost {
+            amount: 1.25,
+            currency: "USD".into(),
+        });
+        let back: Task = serde_json::from_str(&serde_json::to_string(&con).unwrap()).unwrap();
+        assert_eq!(back, con);
     }
 
     #[test]

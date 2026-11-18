@@ -211,6 +211,7 @@ mod tests {
             created_at: 1_700_000_000,
             session_id: None,
             title: None,
+            cost: None,
         }
     }
 

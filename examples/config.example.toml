@@ -17,6 +17,7 @@ copy_files = [".env", ".env.local"]     # se copian al worktree de cada tarea nu
 command = "mi-agente-acp"
 args = []
 env = {}
+# mode = "plan"                         # modo de permisos inicial (ids que ofrezca el agente)
 
 [keys]
 # focus_left = "alt-h"

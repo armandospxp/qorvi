@@ -1632,6 +1632,13 @@ dependencies = [
 [[package]]
 name = "qorvi-acp"
 version = "0.1.0"
+dependencies = [
+ "agent-client-protocol",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
 
 [[package]]
 name = "qorvi-core"

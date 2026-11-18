@@ -19,5 +19,5 @@ pub use git::{
 pub use paths::{Paths, RepoPaths};
 pub use repo::Repo;
 pub use store::{Store, STATE_VERSION};
-pub use task::{Task, TaskName};
+pub use task::{SessionCost, SessionInfo, Task, TaskName};
 pub use workspace::{CreatedTask, NewTask, RemoveOptions, Workspace};

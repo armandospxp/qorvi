@@ -26,6 +26,9 @@ pub struct AgentConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// Modo de permisos inicial de la sesión (id de modo del agente, p. ej. `plan`).
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 
 /// Sección `[keys]`: estilo y atajos personalizados (`acción = "tecla"`).
@@ -245,7 +248,7 @@ mod tests {
              [keys]\nstyle = \"direct\"\nfocus_left = \"alt-h\"\nfocus_right = \"alt-l\"",
         );
         let r = layer(
-            "[agents.b]\ncommand = \"rb\"\nargs = [\"-x\"]\n[agents.c]\ncommand = \"rc\"\n\
+            "[agents.b]\ncommand = \"rb\"\nargs = [\"-x\"]\n[agents.c]\ncommand = \"rc\"\nmode = \"plan\"\n\
              [keys]\nfocus_left = \"ctrl-h\"",
         );
         let c = Config::from_layers(Some(g), Some(r));
@@ -253,6 +256,8 @@ mod tests {
         assert_eq!(c.agents["b"].command, "rb");
         assert_eq!(c.agents["b"].args, vec!["-x"]);
         assert_eq!(c.agents["c"].command, "rc");
+        assert_eq!(c.agents["c"].mode.as_deref(), Some("plan"));
+        assert_eq!(c.agents["a"].mode, None);
         assert_eq!(c.keys.style, Some(KeyStyle::Direct));
         assert_eq!(c.keys.bindings["focus_left"], "ctrl-h");
         assert_eq!(c.keys.bindings["focus_right"], "alt-l");
