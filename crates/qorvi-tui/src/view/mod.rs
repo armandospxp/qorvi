@@ -7,6 +7,7 @@ pub mod panes;
 pub mod review;
 pub mod statusbar;
 pub mod taskbar;
+pub mod term;
 pub mod toasts;
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
@@ -154,7 +155,13 @@ pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
     )
 }
 
+/// Dibuja la interfaz (demo: sin paneles reales).
 pub fn view(state: &AppState, frame: &mut Frame) {
+    view_with(state, frame, &term::NoScreens);
+}
+
+/// Dibuja la interfaz con las pantallas de los paneles reales.
+pub fn view_with(state: &AppState, frame: &mut Frame, screens: &dyn term::Screens) {
     let area = frame.area();
     frame.render_widget(
         Block::new().style(
@@ -172,7 +179,7 @@ pub fn view(state: &AppState, frame: &mut Frame) {
 
     let areas = layout::compute(area, state);
     taskbar::render(state, frame, &areas);
-    render_body(state, frame, &areas);
+    render_body(state, frame, &areas, screens);
     statusbar::render(
         state,
         frame,
@@ -208,7 +215,12 @@ fn render_too_small(frame: &mut Frame, area: Rect) {
     );
 }
 
-fn render_body(state: &AppState, frame: &mut Frame, areas: &layout::Areas) {
+fn render_body(
+    state: &AppState,
+    frame: &mut Frame,
+    areas: &layout::Areas,
+    screens: &dyn term::Screens,
+) {
     if let Some(tabs) = areas.tabs_bar {
         panes::render_tabs(state, frame, tabs);
     }
@@ -216,7 +228,7 @@ fn render_body(state: &AppState, frame: &mut Frame, areas: &layout::Areas) {
         if pane == Pane::Terminal && areas.terminal_minimized {
             panes::render_minimized_terminal(state, frame, rect);
         } else {
-            panes::render_pane(state, frame, rect, pane);
+            panes::render_pane(state, frame, rect, pane, screens);
         }
     }
 }

@@ -133,8 +133,30 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     let mut out = stdout.lock();
     let mut err = std::io::stderr();
     match cli.command {
+        // Sin subcomando, en una terminal y dentro de un repositorio: la app.
+        None if std::io::stdout().is_terminal() && std::io::stdin().is_terminal() => {
+            let ws = match open(cli.dir) {
+                Ok(ws) => ws,
+                Err(e)
+                    if matches!(
+                        e.downcast_ref::<qorvi_core::Error>(),
+                        Some(qorvi_core::Error::NotARepo(_))
+                    ) =>
+                {
+                    return Err(e.context(
+                        "qorvi se abre dentro de un repositorio git (o usa `qorvi --demo`)",
+                    ));
+                }
+                Err(e) => return Err(e),
+            };
+            let style = key_style();
+            qorvi_tui::run_app(ws, style.as_deref()).context("fallo en la interfaz")
+        }
         None => {
             println!("qorvi {}", env!("CARGO_PKG_VERSION"));
+            println!(
+                "Ejecuta `qorvi` en una terminal, dentro de un repositorio, para abrir la app."
+            );
             println!("Usa `qorvi --demo` para ver el mockup de la interfaz.");
             println!("Usa `qorvi new|ls|rm` para gestionar tareas (`qorvi --help`).");
             println!("Usa `qorvi doctor keys` para diagnosticar los atajos de tu terminal.");

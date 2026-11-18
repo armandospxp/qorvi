@@ -258,7 +258,7 @@ impl Workspace {
 
     /// Rama de partida por defecto: la rama actual del árbol principal o la rama por
     /// defecto del repositorio.
-    fn default_base(&self) -> Result<String> {
+    pub fn default_base(&self) -> Result<String> {
         let git = self.git();
         if let Some(b) = git.current_branch()? {
             return Ok(b);
