@@ -12,12 +12,15 @@ use crate::state::{AppState, Modal, ShortcutStyle};
 use crate::theme::{color, Token};
 
 /// Teclas que no dependen de la forma de atajo.
-const HELP_FIXED: [(&str, &str); 7] = [
+/// La primera (F5..F8) solo existe en la demo.
+const HELP_FIXED: [(&str, &str); 9] = [
     ("F5..F8", "DEMO: trabajando/permiso/listo/error"),
     ("Enter", "enviar mensaje o confirmar permiso"),
     ("Alt+Enter", "salto de línea en el mensaje"),
     ("Esc", "cancelar el turno / cerrar diálogo"),
     ("↑/↓", "elegir opción de un permiso"),
+    ("Shift+Tab", "cambiar el modo de permisos del agente"),
+    ("Enter", "editor/terminal: reabrir el programa si terminó"),
     ("j/k ↑/↓", "explorador: mover la selección"),
     (
         "Enter/l h r",
@@ -173,6 +176,7 @@ fn help(state: &AppState, frame: &mut Frame, area: Rect) {
         .chain(
             HELP_FIXED
                 .iter()
+                .skip(usize::from(!state.demo))
                 .map(|(k, d)| (k.to_string(), String::new(), *d)),
         )
         .collect();
