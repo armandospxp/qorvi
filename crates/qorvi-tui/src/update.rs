@@ -118,7 +118,10 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
                 set_status(state, status)
             }
         }
-        Action::Key(key) => handle_key(state, key, &mut fx),
+        Action::Key(key) => {
+            alt_hint(state, &key);
+            handle_key(state, key, &mut fx)
+        }
         Action::Mouse(mouse) => handle_mouse(state, mouse, &mut fx),
         Action::Paste(text) => paste(state, text, &mut fx),
         Action::Agent(name, ev) => agent_event(state, &name, ev, &mut fx),
@@ -320,6 +323,30 @@ fn set_status(state: &mut AppState, status: AgentStatus) {
         }
         _ => {}
     }
+}
+
+/// Lo que escribe Option+tecla en macOS (distribución US) con las letras de los atajos,
+/// cuando la terminal no trata Option como Alt/Meta. Solo símbolos que casi nadie
+/// escribe a propósito (sin `¡`, `¿` ni `ª`, que son texto normal en español).
+const OPTION_CHARS: &str = "˙∆˚¬∂Ωœ†∫µ™∞¶®";
+
+/// Avisa una vez si llega un carácter que delata un Alt mal configurado. La tecla sigue
+/// su curso (puede ser texto de verdad).
+fn alt_hint(state: &mut AppState, key: &KeyEvent) {
+    let KeyCode::Char(c) = key.code else {
+        return;
+    };
+    if state.alt_warned || !is_text_modifier(key.modifiers) || !OPTION_CHARS.contains(c) {
+        return;
+    }
+    state.alt_warned = true;
+    state.push_toast(
+        format!(
+            "Tu terminal escribe «{c}» con Alt/Option: usa Ctrl+Space + tecla o configura \
+             Option como Meta (qorvi doctor keys)"
+        ),
+        ToastLevel::Warning,
+    );
 }
 
 fn is_text_modifier(m: KeyModifiers) -> bool {
@@ -2716,5 +2743,32 @@ mod real_tests {
         let s = real();
         let a = crate::keymap::map_key(&s, KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE));
         assert!(!matches!(a, Action::DemoSetStatus(_)));
+    }
+}
+
+#[cfg(test)]
+mod alt_tests {
+    use super::*;
+    use crate::demo::demo_state;
+
+    #[test]
+    fn avisa_una_vez_si_alt_llega_como_simbolo() {
+        let mut s = demo_state();
+        s.focus = Pane::Agent;
+        let k = |c| Action::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        update(&mut s, k('¡'));
+        update(&mut s, k('ñ'));
+        assert!(s.toasts.is_empty());
+        update(&mut s, k('˙'));
+        update(&mut s, k('∆'));
+        let avisos: Vec<_> = s
+            .toasts
+            .iter()
+            .filter(|t| t.text.contains("Option"))
+            .collect();
+        assert_eq!(avisos.len(), 1);
+        assert!(avisos[0].text.contains('˙'));
+        // La tecla no se pierde: llega a la caja de texto.
+        assert!(s.tasks[s.active].input.ends_with("¡ñ˙∆"));
     }
 }

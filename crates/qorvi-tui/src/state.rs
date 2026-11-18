@@ -290,6 +290,8 @@ pub struct AppState {
     pub direct_mod: KeyModifiers,
     /// Se pulsó `Ctrl+Space` y falta la tecla del atajo.
     pub prefix_pending: bool,
+    /// Ya se avisó de que la terminal no envía Alt (una vez por sesión).
+    pub alt_warned: bool,
     /// Lo fija el bucle de eventos según el tamaño de la terminal; `update` lo
     /// necesita para saber si Alt+h/l recorren paneles (layout compacto).
     pub compact: bool,

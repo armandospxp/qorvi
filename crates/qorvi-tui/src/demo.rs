@@ -282,6 +282,7 @@ pub fn demo_state() -> AppState {
             KeyModifiers::CONTROL
         },
         prefix_pending: false,
+        alt_warned: false,
         compact: false,
         explorer_default: true,
         size: (0, 0),
