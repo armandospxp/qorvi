@@ -19,7 +19,7 @@ use crate::git::{Git, WorktreeInfo};
 use crate::paths::{Paths, RepoPaths};
 use crate::repo::Repo;
 use crate::store::Store;
-use crate::task::{Task, TaskName};
+use crate::task::{SessionInfo, Task, TaskName};
 
 /// Repositorio abierto con su configuración y su estado.
 #[derive(Debug, Clone)]
@@ -107,6 +107,13 @@ impl Workspace {
             .ok_or_else(|| Error::TaskNotFound(name.to_string()))
     }
 
+    /// Guarda en la tarea la sesión, el título y el coste que informa el agente.
+    pub fn record_session(&self, name: &str, info: SessionInfo) -> Result<()> {
+        Store::modify(&self.paths.tasks_file, |store| {
+            store.update(name, |t| t.apply_session(info))
+        })
+    }
+
     /// Crea una tarea: rama nueva desde `base`, worktree en el directorio de datos y
     /// copia de `copy_files`. No ejecuta `setup` (eso ocurre en la terminal de la tarea).
     pub fn create_task(&self, new: NewTask) -> Result<CreatedTask> {
@@ -137,6 +144,7 @@ impl Workspace {
             created_at: now_unix(),
             session_id: None,
             title: None,
+            cost: None,
         };
 
         let created_worktree = Cell::new(false);
@@ -409,6 +417,32 @@ command = "fake-acp"
         assert_eq!(tasks.len(), 1);
         assert_eq!(&tasks[0], t);
         assert!(f.ws.orphan_worktrees().unwrap().is_empty());
+    }
+
+    #[test]
+    fn registrar_sesion() {
+        let f = fixture(CONFIG);
+        f.ws.create_task(new("t")).unwrap();
+        f.ws.record_session(
+            "t",
+            SessionInfo {
+                session_id: Some("s1".into()),
+                title: Some(Some("Título".into())),
+                cost: Some(crate::task::SessionCost {
+                    amount: 0.25,
+                    currency: "USD".into(),
+                }),
+            },
+        )
+        .unwrap();
+        let t = f.ws.task("t").unwrap();
+        assert_eq!(t.session_id.as_deref(), Some("s1"));
+        assert_eq!(t.title.as_deref(), Some("Título"));
+        assert_eq!(t.cost.map(|c| c.amount), Some(0.25));
+        assert!(matches!(
+            f.ws.record_session("otra", SessionInfo::default()),
+            Err(Error::TaskNotFound(_))
+        ));
     }
 
     #[test]

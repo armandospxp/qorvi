@@ -5,3 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+agent-client-protocol = "5.3.0"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt", "process", "io-util", "sync", "time", "macros", "fs"] }
+tokio-util = { version = "0.7.20", features = ["compat"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt", "io-util"] }
