@@ -50,12 +50,15 @@ pub fn probe_keyboard_enhancement_raw() -> io::Result<Option<bool>> {
 }
 
 /// Abre la TUI con datos falsos: sin procesos, git ni red.
-pub fn run_demo() -> io::Result<()> {
+///
+/// `keys_style` es el estilo de atajos pedido (`direct`, `prefix` o `auto`): el de
+/// `QORVI_KEYS` o, si no está, el de `[keys] style` en la config.
+pub fn run_demo(keys_style: Option<&str>) -> io::Result<()> {
     let mut terminal = ratatui::init();
     // Con el modo raw ya activo se puede consultar a la terminal.
     let enhancement = probe_keyboard_enhancement();
-    let env = std::env::var("QORVI_KEYS").ok();
-    let style = detect::resolve_style(env.as_deref(), cfg!(windows), enhancement);
+    let env = keys_style;
+    let style = detect::resolve_style(env, cfg!(windows), enhancement);
     // Windows entrega todas las teclas por la consola: no necesita (ni admite) el protocolo.
     let push_flags = !cfg!(windows) && enhancement == Some(true);
     if push_flags {
@@ -77,7 +80,7 @@ pub fn run_demo() -> io::Result<()> {
     }));
     let mut state = demo::demo_state();
     state.shortcut_style = style;
-    if let Some(hint) = detect::startup_hint(env.as_deref(), cfg!(target_os = "macos"), style) {
+    if let Some(hint) = detect::startup_hint(env, cfg!(target_os = "macos"), style) {
         state.push_toast(hint, ToastLevel::Info);
     }
     let result =

@@ -20,4 +20,5 @@ env = {}
 # mode = "plan"                         # modo de permisos inicial (ids que ofrezca el agente)
 
 [keys]
+# style = "auto"                       # auto | direct (Cmd/Ctrl+tecla) | prefix (Ctrl+Space + tecla); QORVI_KEYS tiene prioridad
 # focus_left = "alt-h"

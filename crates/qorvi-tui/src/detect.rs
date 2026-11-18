@@ -2,8 +2,8 @@
 
 use crate::state::ShortcutStyle;
 
-/// Elige la forma de atajo. `env` es el valor de `QORVI_KEYS` (`direct`, `prefix` o
-/// `auto`); `enhancement` es el resultado de `supports_keyboard_enhancement` (`None` si
+/// Elige la forma de atajo. `env` es el estilo pedido (`QORVI_KEYS` o `[keys] style`:
+/// `direct`, `prefix` o `auto`); `enhancement` es el resultado de `supports_keyboard_enhancement` (`None` si
 /// la consulta falló).
 pub fn resolve_style(
     env: Option<&str>,
@@ -24,7 +24,7 @@ pub fn resolve_style(
     }
 }
 
-/// ¿Fuerza `QORVI_KEYS` un estilo? (`auto` y los valores desconocidos, no).
+/// ¿Se pidió un estilo concreto? (`auto` y los valores desconocidos, no).
 fn forced(env: Option<&str>) -> bool {
     matches!(
         env.map(str::to_ascii_lowercase).as_deref(),
@@ -83,7 +83,7 @@ pub fn doctor_keys_report(
             ShortcutStyle::Prefix => "prefijo (Ctrl+Space + tecla; el ratón también funciona)",
         }
     ));
-    out.push("Fuerza otro estilo con QORVI_KEYS=direct|prefix|auto.".to_string());
+    out.push("Fuerza otro estilo con `[keys] style = \"direct\"|\"prefix\"` en la config o con QORVI_KEYS=direct|prefix|auto.".to_string());
     out.push(String::new());
 
     match term_program {
