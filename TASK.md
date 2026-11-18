@@ -4,7 +4,7 @@ Estado del proyecto por fases. Marca: `[x]` hecho · `[~]` en curso · `[ ]` pen
 Ejecutor: **Opus** (orquestador), **Sonnet** / **Haiku** (workers), **Usuario**.
 Los cambios entregados se detallan en [CHANGELOG.md](CHANGELOG.md).
 
-_Última actualización: 2026-11-17_
+_Última actualización: 2026-11-18_
 
 ## Fase 0: esqueleto y spikes ✅
 
@@ -68,12 +68,13 @@ _Última actualización: 2026-11-17_
 
 - [x] El test `snapshots` de qorvi-tui tardaba ~90 s: ahora ~10 s (dependencias optimizadas en dev) · Opus
 - [x] Avisar en `qorvi new` si un archivo de `copy_files` no está en `.gitignore` · Opus
-- [ ] Al cerrar un agente, matar también sus procesos hijos (hoy se cierra su stdin y se mata solo el proceso directo; p. ej. `npx` → `node`) · Sonnet
+- [x] Al cerrar un agente, matar también sus procesos hijos (grupo de procesos en Unix, Job Object en Windows) · Opus
 - [ ] Añadir a la config de ejemplo los comandos reales de Claude Code y Codex por ACP · Usuario
 - [x] Merge, push y PR en segundo plano con spinner · Opus
-- [ ] Mostrar el plan del agente (`Plan`) y su razonamiento en el chat · Sonnet
-- [ ] Persistir el chat (hoy solo se recupera si el agente repite el historial al reanudar) · Sonnet
-- [ ] Ayuda (`?`): añadir Shift+Tab (modo) y Enter (reabrir panel) · Haiku
+- [x] Mostrar el plan del agente (`Plan`) y su razonamiento en el chat · Opus
+- [x] Persistir el chat por tarea (`.git/qorvi/chats/`) · Opus
+- [x] Ayuda (`?`): añadir Shift+Tab (modo) y Enter (reabrir panel) · Opus
+- [ ] Probar en Windows que el Job Object cierra los procesos hijos del agente · Usuario
 - [ ] Probar la CLI y los tests de git en macOS y Windows (canonicalización de rutas, `NUL`) · Usuario
 - [ ] Probar `gh` real: `create_pr` y `pr_for_branch` · Usuario
 

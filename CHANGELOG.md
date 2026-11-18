@@ -37,6 +37,10 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Editor y terminal reales: teclado, ratón, rueda, pegado y cursor; Enter reabre un programa que terminó; abrir archivos desde el explorador.
 - Review con el diff real de la tarea: commit, merge en la rama base, push + PR con `gh` y descartar la tarea.
 - Avisos de tareas en segundo plano (terminó, falló, pide permiso).
+- El chat de cada tarea se guarda (`.git/qorvi/chats/<tarea>.json`, últimos 500 mensajes) y se recupera al volver a abrir qorvi; si el agente repite el historial al reanudar, no se duplica.
+- El chat muestra el plan del agente (se actualiza en su sitio) y su razonamiento (atenuado, últimas 3 líneas).
+- La ayuda incluye Shift+Tab (modo de permisos) y Enter para reabrir el editor o la terminal.
+- Al cerrar un agente se terminan también sus procesos hijos (grupo de procesos en Unix, Job Object en Windows).
 - Merge y push + PR corren en segundo plano con un spinner en la barra de estado y en la review; la interfaz sigue respondiendo, no se puede lanzar otra operación hasta que acabe y salir pide confirmación.
 - Aviso, una vez por sesión, si la terminal escribe símbolos (`˙`, `∆`…) en lugar de enviar Alt.
 - Pegado con bracketed paste en el chat, el diálogo de tarea nueva y los paneles.

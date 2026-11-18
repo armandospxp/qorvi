@@ -213,6 +213,8 @@ impl Workspace {
             if !opts.keep_branch && git.branch_exists(&task.branch)? {
                 git.delete_branch(&task.branch, true)?;
             }
+            // El historial del chat ya no sirve sin la tarea (si no existe, nada).
+            let _ = std::fs::remove_file(self.paths.chat_file(name));
             store.remove(name)
         })
     }
@@ -470,6 +472,24 @@ command = "fake-acp"
         assert_eq!(created.warnings.len(), 1, "{:?}", created.warnings);
         assert!(created.warnings[0].contains("`notas.txt`"));
         assert!(created.task.worktree.join(".env").is_file());
+    }
+
+    #[test]
+    fn borrar_tarea_borra_su_chat() {
+        let f = fixture(CONFIG);
+        f.ws.create_task(new("t")).unwrap();
+        let chat = f.ws.paths().chat_file("t");
+        std::fs::create_dir_all(chat.parent().unwrap()).unwrap();
+        std::fs::write(&chat, "[]").unwrap();
+        f.ws.remove_task(
+            "t",
+            RemoveOptions {
+                force: true,
+                keep_branch: false,
+            },
+        )
+        .unwrap();
+        assert!(!chat.exists());
     }
 
     #[test]

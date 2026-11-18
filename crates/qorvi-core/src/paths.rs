@@ -86,6 +86,13 @@ impl RepoPaths {
         }
     }
 
+    /// Historial del chat de la tarea `task_name` (lo escribe la interfaz).
+    pub fn chat_file(&self, task_name: &str) -> PathBuf {
+        self.state_dir
+            .join("chats")
+            .join(format!("{task_name}.json"))
+    }
+
     /// Ruta del worktree de la tarea `task_name`.
     pub fn worktree_for(&self, task_name: &str) -> PathBuf {
         self.worktrees_dir.join(task_name)

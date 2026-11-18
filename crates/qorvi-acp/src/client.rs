@@ -30,7 +30,7 @@ use tokio::sync::mpsc;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::event::{self, AgentEvent, PermissionChoice, PermissionId, SessionReady};
-use crate::fs;
+use crate::{fs, proc};
 
 /// Errores al lanzar el agente o al darle órdenes.
 #[derive(Debug, thiserror::Error)]
@@ -101,20 +101,21 @@ impl AgentHandle {
         let rt = runtime()?;
         let mut child = {
             let _guard = rt.enter();
-            tokio::process::Command::new(&command.program)
-                .args(&command.args)
+            let mut cmd = tokio::process::Command::new(&command.program);
+            cmd.args(&command.args)
                 .envs(&command.env)
                 .current_dir(&session.cwd)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .kill_on_drop(true)
-                .spawn()
-                .map_err(|source| Error::Spawn {
-                    program: command.program.clone(),
-                    source,
-                })?
+                .kill_on_drop(true);
+            proc::prepare(&mut cmd);
+            cmd.spawn().map_err(|source| Error::Spawn {
+                program: command.program.clone(),
+                source,
+            })?
         };
+        let mut tree = proc::ProcessTree::attach(&child);
         let (Some(stdin), Some(stdout), Some(stderr)) =
             (child.stdin.take(), child.stdout.take(), child.stderr.take())
         else {
@@ -130,7 +131,7 @@ impl AgentHandle {
                 }
             });
             let conn = run(stdout, stdin, session, sink, cmds, busy);
-            tokio::select! {
+            let exited = tokio::select! {
                 r = conn => {
                     // stdin ya se cerró: el agente debería salir solo.
                     let status = match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
@@ -155,7 +156,10 @@ impl AgentHandle {
                         }),
                     }
                 }
-            }
+            };
+            // Lo que quede del árbol (nietos lanzados por el agente) también se cierra.
+            tree.kill().await;
+            exited
         })
     }
 

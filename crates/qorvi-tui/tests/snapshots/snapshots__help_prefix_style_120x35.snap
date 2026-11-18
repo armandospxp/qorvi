@@ -5,34 +5,34 @@ expression: "snap(&s, 120, 35)"
  [1 APP-12 ● trabajando] [2 APP-13 ⏳ permiso] [3 fix-login ✓ listo]
 ┌ Archivos ────────────┐┌ nvim · src/main.rs ───────────────────────────────┐┌ Agente · claude · ● trabajando ─────────┐
 │ ▸ .github/           ││  1 use std::io;                                   ││› Mejora la validación del nombre de     │
-│ ▾ src/ •             ││  2                                                ││  tarea en src/lib.rs                    │
-│   ▸ util/      ┌ Ayuda · atajos (Esc cierra) ───────────────────────────────────────────────────────┐                │
-│     config.rs  │ También: Alt+<tecla> equivale a Ctrl+Space <tecla>                                 │tual y después  │
-│›  M lib.rs     │                                                                                    │rores           │
-│     main.rs    │ Ctrl+Space h    Ctrl+Alt+←  foco al panel de la izquierda                          │                │
-│   A session.rs │ Ctrl+Space j    Ctrl+Alt+↓  foco al panel de abajo                                 │                │
-│ ▸ tests/       │ Ctrl+Space k    Ctrl+Alt+↑  foco al panel de arriba                                │ ✓ completado   │
-│   .gitignore   │ Ctrl+Space l    Ctrl+Alt+→  foco al panel de la derecha                            │                │
-│   Cargo.toml   │ Ctrl+Space 1..9 Ctrl+1..9   ir a la tarea N                                        │) ● en curso    │
-│   README.md    │ Ctrl+Space n    Ctrl+Alt+N  nueva tarea                                            │en curso        │
-│ ? notas.txt    │ Ctrl+Space d    Ctrl+Alt+R  review / diff                                          │                │
-│                │ Ctrl+Space z                zoom del panel                                         │                │
+│ ▾ src/ •       ┌ Ayuda · atajos (Esc cierra) ───────────────────────────────────────────────────────┐                │
+│   ▸ util/      │ También: Alt+<tecla> equivale a Ctrl+Space <tecla>                                 │                │
+│     config.rs  │                                                                                    │tual y después  │
+│›  M lib.rs     │ Ctrl+Space h    Ctrl+Alt+←  foco al panel de la izquierda                          │rores           │
+│     main.rs    │ Ctrl+Space j    Ctrl+Alt+↓  foco al panel de abajo                                 │                │
+│   A session.rs │ Ctrl+Space k    Ctrl+Alt+↑  foco al panel de arriba                                │                │
+│ ▸ tests/       │ Ctrl+Space l    Ctrl+Alt+→  foco al panel de la derecha                            │ ✓ completado   │
+│   .gitignore   │ Ctrl+Space 1..9 Ctrl+1..9   ir a la tarea N                                        │                │
+│   Cargo.toml   │ Ctrl+Space n    Ctrl+Alt+N  nueva tarea                                            │) ● en curso    │
+│   README.md    │ Ctrl+Space d    Ctrl+Alt+R  review / diff                                          │en curso        │
+│ ? notas.txt    │ Ctrl+Space z                zoom del panel                                         │                │
 │                │ Ctrl+Space t    Ctrl+J      mostrar/ocultar la terminal                            │                │
 │                │ Ctrl+Space e    Ctrl+B      mostrar/ocultar el explorador                          │                │
 │                │ Ctrl+Space m                ver de nuevo el último aviso                           │                │
 │                │ Ctrl+Space q    Ctrl+Alt+Q  salir                                                  │                │
 │                │ Ctrl+Space ?    F1          esta ayuda                                             │                │
 │                │ F5..F8                      DEMO: trabajando/permiso/listo/error                   │                │
-│                │ Enter                       enviar mensaje o confirmar permiso                     │ Alt+Enter sal…┐│
-│                │ Alt+Enter                   salto de línea en el mensaje                           │               ││
-│                │ Esc                         cancelar el turno / cerrar diálogo                     │───────────────┘│
-└────────────────│ ↑/↓                         elegir opción de un permiso                            │────────────────┘
-┌ zsh ───────────│ j/k ↑/↓                     explorador: mover la selección                         │────────────────┐
+│                │ Enter                       enviar mensaje o confirmar permiso                     │                │
+│                │ Alt+Enter                   salto de línea en el mensaje                           │ Alt+Enter sal…┐│
+│                │ Esc                         cancelar el turno / cerrar diálogo                     │               ││
+│                │ ↑/↓                         elegir opción de un permiso                            │───────────────┘│
+└────────────────│ Shift+Tab                   cambiar el modo de permisos del agente                 │────────────────┘
+┌ zsh ───────────│ Enter                       editor/terminal: reabrir el programa si terminó        │────────────────┐
+│test config::tes│ j/k ↑/↓                     explorador: mover la selección                         │                │
 │test config::tes│ Enter/l h r                 explorador: abrir · contraer/subir · refrescar         │                │
-│test config::tes│                                                                                    │                │
+│test session::te│                                                                                    │                │
 │test session::te│ Ratón: clic para enfocar · rueda para desplazar                                    │                │
-│test session::te└────────────────────────────────────────────────────────────────────────────────────┘                │
-│                                                                                                                      │
+│                └────────────────────────────────────────────────────────────────────────────────────┘                │
 │test result: ok. 4 passed; 0 failed; 0 ignored                                                                        │
 │$                                                                                                                     │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

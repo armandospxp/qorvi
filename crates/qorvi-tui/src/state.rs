@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use crossterm::event::KeyModifiers;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentStatus {
@@ -34,7 +35,7 @@ impl Pane {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolStatus {
     Pending,
     InProgress,
@@ -42,7 +43,7 @@ pub enum ToolStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ChatItem {
     User(String),
     Agent(String),
@@ -64,10 +65,27 @@ pub enum ChatItem {
         request: Option<PermissionRef>,
     },
     Notice(String),
+    /// Razonamiento del agente (se muestra atenuado y recortado).
+    Thought(String),
+    /// Plan del agente: cada entrada con su estado. Un plan nuevo sustituye al del turno.
+    Plan(Vec<PlanEntry>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlanState {
+    Pending,
+    InProgress,
+    Completed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanEntry {
+    pub content: String,
+    pub state: PlanState,
 }
 
 /// Petición de permiso del agente a la que responde un [`ChatItem::Permission`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionRef {
     pub id: u64,
     /// Ids de las opciones, en el mismo orden que `options`.
@@ -144,6 +162,9 @@ pub struct Task {
     /// (p. ej. «nvim terminó · Enter lo reinicia»). Solo en la app real.
     pub editor_note: Option<String>,
     pub terminal_note: Option<String>,
+    /// El chat se recuperó de disco y el agente está repitiendo el historial al
+    /// reanudar: esa repetición se ignora para no duplicarlo.
+    pub replaying: bool,
 }
 
 impl Task {
@@ -172,6 +193,7 @@ impl Task {
             modes: Vec::new(),
             editor_note: None,
             terminal_note: None,
+            replaying: false,
         }
     }
 }
