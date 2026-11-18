@@ -55,7 +55,8 @@ atajos de la terminal).
 qorvi limita al worktree de la tarea las lecturas y escrituras que el agente pide **a
 través de ACP**, y nunca aprueba permisos de forma automática. Pero los agentes también
 tienen herramientas propias que ejecutan comandos y escriben archivos con tus permisos:
-eso lo controla el modo de permisos de cada agente. **Un worktree no es un sandbox.**
+eso lo controla el modo de permisos de cada agente (`mode` en la config de cada agente
+fija el modo inicial). **Un worktree no es un sandbox.**
 
 ## Desarrollo
 

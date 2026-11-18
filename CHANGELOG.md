@@ -25,6 +25,16 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Paneles de terminal (`qorvi-pty`): programa en un PTY con pantalla emulada, respuestas a consultas de terminal (cursor, DA1/DA2, XTVERSION, colores), código de salida, título, campana y pegado seguro con bracketed paste.
 - Ratón en los paneles (X10, UTF-8 y SGR, según lo que pida el programa) y scrollback; la rueda desplaza el historial o envía flechas en pantallas como less.
 - Editor de la tarea: nvim se lanza con `--listen` para abrir archivos desde el explorador; vim y helix, con teclas (best effort).
+- Cliente ACP (`qorvi-acp`): cada agente corre en su propio hilo con una API síncrona y eventos propios. Sesiones nuevas o reanudadas (`session/load`, con sesión nueva y aviso si falla), turnos, cancelación, plan, herramientas con sus diffs, uso de contexto, coste y título.
+- Permisos sin bloquear: se responden cuando el usuario quiera y, al cancelar el turno, los pendientes se descartan como pide ACP.
+- `fs/read_text_file` (con `line`/`limit`) y `fs/write_text_file` limitados al worktree, también para rutas nuevas y symlinks; cada rechazo se notifica.
+- Modo de permisos inicial por agente (`mode` en `[agents.<nombre>]`) y cambio de modo durante la sesión.
+- El coste y el título de la sesión se guardan en la tarea (`qorvi ls --json`).
+- `qorvi new` avisa si un archivo de `copy_files` no está en `.gitignore` (aparecería como cambio de la tarea).
+- Opción `[keys] style` en la config; `QORVI_KEYS` sigue teniendo prioridad.
+
+### Cambiado
+- Las dependencias se compilan optimizadas también en debug: los tests de la TUI pasan de ~90 s a ~10 s.
 
 ### Corregido
 - La CI de Windows fallaba por imports que solo se usan en Unix.

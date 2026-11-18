@@ -4,7 +4,7 @@ Estado del proyecto por fases. Marca: `[x]` hecho · `[~]` en curso · `[ ]` pen
 Ejecutor: **Opus** (orquestador), **Sonnet** / **Haiku** (workers), **Usuario**.
 Los cambios entregados se detallan en [CHANGELOG.md](CHANGELOG.md).
 
-_Última actualización: 2026-11-16_
+_Última actualización: 2026-11-17_
 
 ## Fase 0: esqueleto y spikes ✅
 
@@ -24,7 +24,7 @@ _Última actualización: 2026-11-16_
 - [x] Atajos con tecla prefijo `Ctrl+Space` (por defecto en macOS) además de `Alt` · Sonnet
 - [x] Ratón: clic para enfocar paneles, tareas, explorador y permisos; rueda para desplazar · Sonnet
 - [x] Atajos directos `Cmd` (macOS) / `Ctrl` (Windows/Linux) con detección automática de la terminal · Sonnet
-- [ ] Opción `[keys] style` en la config (llega con la config de la fase 1; hoy: variable `QORVI_KEYS`) · Sonnet
+- [x] Opción `[keys] style` en la config (`QORVI_KEYS` tiene prioridad) · Opus
 - [ ] Probar atajos en Ghostty, iTerm2, Terminal.app, VS Code, Windows Terminal y GNOME Terminal · Usuario
 
 ## Fase 1: núcleo (`qorvi-core`) y CLI ✅
@@ -48,23 +48,26 @@ _Última actualización: 2026-11-16_
 - [x] Compilación sin warnings para Windows y macOS (clippy con `--target`) · Opus
 - [ ] Prueba en Windows (ConPTY) · Usuario
 
-## Fase 3: agentes (`qorvi-acp`)
+## Fase 3: agentes (`qorvi-acp`) ✅
 
-- [ ] Cliente ACP: sesiones, turnos, cancelación y reanudación
-- [ ] Permisos sin bloquear y contención de `fs/*`
-- [ ] Modo de permisos del agente visible y configurable
-- [ ] Coste y título de sesión por tarea
+- [x] Cliente ACP: sesiones, turnos, cancelación y reanudación · Opus
+- [x] Permisos sin bloquear y contención de `fs/*` · Opus
+- [x] Modo de permisos del agente visible y configurable (`mode` por agente) · Opus
+- [x] Coste y título de sesión por tarea (`Workspace::record_session`) · Opus
 
 ## Fase 4: aplicación completa (`qorvi-tui`)
 
 - [ ] Conectar el mockup a core, PTY y ACP
+- [ ] Probar `qorvi-acp` con Claude Code real dentro de la app (reanudar, cancelar, modos, coste) · Usuario
 - [ ] Notificaciones de tareas en segundo plano
 - [ ] Aviso si la terminal no envía Alt
 
 ## Mejoras detectadas
 
-- [ ] El test `snapshots` de qorvi-tui tarda ~90 s: acelerarlo · Sonnet
-- [ ] Avisar en `qorvi new` si un archivo de `copy_files` no está en `.gitignore` (cuenta como cambio y obliga a `rm --force`) · Sonnet
+- [x] El test `snapshots` de qorvi-tui tardaba ~90 s: ahora ~10 s (dependencias optimizadas en dev) · Opus
+- [x] Avisar en `qorvi new` si un archivo de `copy_files` no está en `.gitignore` · Opus
+- [ ] Al cerrar un agente, matar también sus procesos hijos (hoy se cierra su stdin y se mata solo el proceso directo; p. ej. `npx` → `node`) · Sonnet
+- [ ] Añadir a la config de ejemplo los comandos reales de Claude Code y Codex por ACP · Usuario
 - [ ] Probar la CLI y los tests de git en macOS y Windows (canonicalización de rutas, `NUL`) · Usuario
 - [ ] Probar `gh` real: `create_pr` y `pr_for_branch` · Usuario
 
