@@ -52,6 +52,13 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, small: bool) {
             0,
         ));
     }
+    if let Some(op) = &state.busy {
+        segs.push(seg(
+            format!("{} {op}…", state.spinner_frame()),
+            super::bold(Token::Accent),
+            0,
+        ));
+    }
     if small {
         segs.push(seg("terminal pequeña", fg(Token::Warning), 2));
     }

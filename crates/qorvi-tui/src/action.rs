@@ -55,6 +55,8 @@ pub enum Action {
     EditorOpened(String, String),
     /// Aviso del runtime.
     Toast(String, ToastLevel),
+    /// Terminó la operación de git en segundo plano, con su resultado.
+    BusyDone(String, ToastLevel),
 }
 
 /// Entrada para el programa de un panel. Las coordenadas del ratón son relativas al

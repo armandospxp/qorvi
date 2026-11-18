@@ -82,6 +82,13 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
     }
     match action {
         Action::Quit => {
+            if let (Some(op), false) = (&state.busy, state.quit_armed) {
+                // Salir a mitad de un push o un merge lo dejaría a medias: se avisa antes.
+                let msg = format!("{op} en curso: vuelve a pulsar salir para salir igualmente");
+                state.quit_armed = true;
+                state.push_toast(msg, ToastLevel::Warning);
+                return fx;
+            }
             state.should_quit = true;
             return vec![Effect::Quit];
         }
@@ -186,6 +193,11 @@ pub fn update(state: &mut AppState, action: Action) -> Vec<Effect> {
             }
         }
         Action::Toast(text, level) => state.push_toast(text, level),
+        Action::BusyDone(text, level) => {
+            state.busy = None;
+            state.quit_armed = false;
+            state.push_toast(text, level);
+        }
         // El resto de acciones de navegación no actúan con un diálogo abierto.
         _ if modal_open => {}
         Action::FocusLeft => focus_horizontal(state, false),
@@ -226,6 +238,9 @@ fn active_name(state: &AppState) -> Option<String> {
 }
 
 fn tick(state: &mut AppState) {
+    if state.busy.is_some() {
+        state.spinner = state.spinner.wrapping_add(1);
+    }
     for t in &mut state.toasts {
         t.ttl_ticks = t.ttl_ticks.saturating_sub(1);
     }
@@ -1161,6 +1176,11 @@ fn review_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
         KeyCode::Char('c') => "commit",
         KeyCode::Char('m') => "merge",
         KeyCode::Char('p') => "push + PR",
+        KeyCode::Char('x') if state.busy.is_some() => {
+            let op = state.busy.clone().unwrap_or_default();
+            state.push_toast(format!("Espera a que termine: {op}"), ToastLevel::Warning);
+            return;
+        }
         KeyCode::Char('x') => {
             let name = task_name.unwrap_or_default();
             state.modal = Modal::Confirm {
@@ -1181,10 +1201,22 @@ fn review_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
     let Some(name) = task_name else {
         return;
     };
+    if let Some(op) = &state.busy {
+        state.push_toast(format!("Espera a que termine: {op}"), ToastLevel::Warning);
+        return;
+    }
     fx.push(match key.code {
         KeyCode::Char('c') => Effect::Commit(name),
-        KeyCode::Char('m') => Effect::Merge(name),
-        _ => Effect::PullRequest(name),
+        KeyCode::Char('m') => {
+            state.busy = Some(format!("Merge de {name}"));
+            state.spinner = 0;
+            Effect::Merge(name)
+        }
+        _ => {
+            state.busy = Some(format!("Push y PR de {name}"));
+            state.spinner = 0;
+            Effect::PullRequest(name)
+        }
     });
 }
 
@@ -2701,6 +2733,7 @@ mod real_tests {
             update(&mut s, key(KeyCode::Char('m'))),
             vec![Effect::Merge("nueva".into())]
         );
+        update(&mut s, Action::BusyDone("hecho".into(), ToastLevel::Info));
         update(&mut s, key(KeyCode::Char('x')));
         assert_eq!(
             update(&mut s, key(KeyCode::Enter)),
@@ -2770,5 +2803,65 @@ mod alt_tests {
         assert!(avisos[0].text.contains('˙'));
         // La tecla no se pierde: llega a la caja de texto.
         assert!(s.tasks[s.active].input.ends_with("¡ñ˙∆"));
+    }
+}
+
+#[cfg(test)]
+mod busy_tests {
+    use super::*;
+    use crate::demo::demo_state;
+
+    fn review_open() -> AppState {
+        let mut s = demo_state();
+        s.demo = false;
+        s.modal = Modal::Review {
+            files: vec![],
+            selected: 0,
+        };
+        s
+    }
+
+    fn key(c: char) -> Action {
+        Action::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE))
+    }
+
+    #[test]
+    fn merge_en_curso_bloquea_otras_operaciones_y_anima_el_spinner() {
+        let mut s = review_open();
+        let name = s.active_task().unwrap().name.clone();
+        assert_eq!(update(&mut s, key('m')), vec![Effect::Merge(name.clone())]);
+        assert_eq!(s.busy.as_deref(), Some(format!("Merge de {name}").as_str()));
+        // Mientras dura, ni otro merge, ni PR, ni commit, ni descartar.
+        for c in ['m', 'p', 'c', 'x'] {
+            assert!(update(&mut s, key(c)).is_empty(), "{c}");
+        }
+        assert!(matches!(s.modal, Modal::Review { .. }));
+        assert!(s
+            .toasts
+            .iter()
+            .any(|t| t.text.starts_with("Espera a que termine")));
+        let f0 = s.spinner_frame();
+        update(&mut s, Action::Tick);
+        assert_ne!(s.spinner_frame(), f0);
+
+        update(
+            &mut s,
+            Action::BusyDone("integrada".into(), ToastLevel::Info),
+        );
+        assert_eq!(s.busy, None);
+        assert_eq!(s.toasts.last().unwrap().text, "integrada");
+        assert_eq!(update(&mut s, key('p')), vec![Effect::PullRequest(name)]);
+    }
+
+    #[test]
+    fn salir_con_una_operacion_en_curso_pide_confirmar() {
+        let mut s = review_open();
+        update(&mut s, key('p'));
+        assert!(update(&mut s, Action::Quit).is_empty());
+        assert!(s.quit_armed);
+        assert_eq!(update(&mut s, Action::Quit), vec![Effect::Quit]);
+        // Sin operación en curso se sale a la primera.
+        let mut s = review_open();
+        assert_eq!(update(&mut s, Action::Quit), vec![Effect::Quit]);
     }
 }

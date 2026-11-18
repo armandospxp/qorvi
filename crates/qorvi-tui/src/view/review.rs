@@ -123,14 +123,21 @@ pub fn render(
         .collect();
     frame.render_widget(Paragraph::new(lines), diff_inner);
 
-    frame.render_widget(
-        Paragraph::new(Line::styled(
+    let footer_line = match &state.busy {
+        Some(op) => Line::styled(
+            truncate(
+                &format!(" {} {op}… · j/k mover · Esc cerrar", state.spinner_frame()),
+                usize::from(footer.width),
+            ),
+            super::bold(Token::Accent),
+        ),
+        None => Line::styled(
             truncate(
                 " j/k mover · c commit · m merge · p push+PR · x descartar · Esc cerrar",
                 usize::from(footer.width),
             ),
             fg(Token::Muted),
-        )),
-        footer,
-    );
+        ),
+    };
+    frame.render_widget(Paragraph::new(footer_line), footer);
 }
