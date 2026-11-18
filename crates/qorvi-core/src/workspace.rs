@@ -170,7 +170,9 @@ impl Workspace {
             return Err(e);
         }
 
-        let warnings = copy_files(&self.repo.root, &task.worktree, &self.config.copy_files);
+        let (copied, mut warnings) =
+            copy_files(&self.repo.root, &task.worktree, &self.config.copy_files);
+        warnings.extend(copied_as_changes(&task.worktree, &copied));
         Ok(CreatedTask { task, warnings })
     }
 
@@ -284,7 +286,9 @@ impl Workspace {
 
 /// Copia al worktree los archivos de `copy_files` (rutas relativas a la raíz del repo, sin
 /// globs). Los que no existen se ignoran en silencio; los demás fallos son avisos.
-fn copy_files(root: &Path, worktree: &Path, files: &[String]) -> Vec<String> {
+/// Devuelve las rutas copiadas y los avisos.
+fn copy_files(root: &Path, worktree: &Path, files: &[String]) -> (Vec<PathBuf>, Vec<String>) {
+    let mut copied = Vec::new();
     let mut warnings = Vec::new();
     for rel in files {
         let rel_path = Path::new(rel);
@@ -313,11 +317,39 @@ fn copy_files(root: &Path, worktree: &Path, files: &[String]) -> Vec<String> {
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|_| std::fs::copy(&src, &dst).map(|_| ()));
-        if let Err(e) = res {
-            warnings.push(format!("copy_files: no se pudo copiar `{rel}`: {e}"));
+        match res {
+            Ok(()) => copied.push(
+                rel_path
+                    .components()
+                    .filter(|c| matches!(c, Component::Normal(_)))
+                    .collect(),
+            ),
+            Err(e) => warnings.push(format!("copy_files: no se pudo copiar `{rel}`: {e}")),
         }
     }
-    warnings
+    (copied, warnings)
+}
+
+/// Avisos para los archivos copiados que git ve como cambios (no están en `.gitignore`):
+/// cuentan como trabajo de la tarea y obligan a `qorvi rm --force`.
+fn copied_as_changes(worktree: &Path, copied: &[PathBuf]) -> Vec<String> {
+    if copied.is_empty() {
+        return Vec::new();
+    }
+    let Ok(status) = Git::new(worktree).status() else {
+        return Vec::new(); // solo es un aviso: si git falla aquí, no se avisa
+    };
+    copied
+        .iter()
+        .filter(|c| status.iter().any(|s| &s.path == *c))
+        .map(|c| {
+            let rel = c.to_string_lossy().replace('\\', "/");
+            format!(
+                "copy_files: `{rel}` no está en .gitignore: aparecerá como cambio de la tarea \
+                 y `qorvi rm` pedirá --force (añádelo a .gitignore)"
+            )
+        })
+        .collect()
 }
 
 /// Ruta comparable: canonicalizada si existe (resuelve `/var` → `/private/var` en macOS y
@@ -409,14 +441,35 @@ command = "fake-acp"
             "SECRETO=1"
         );
         assert!(t.worktree.join("conf/local.toml").is_file());
-        assert_eq!(created.warnings.len(), 2, "{:?}", created.warnings);
-        assert!(created.warnings[0].contains("../fuera"));
-        assert!(created.warnings[1].contains("dir"));
+        // Además, los copiados que no están en .gitignore avisan de que cuentan como cambio.
+        let w = &created.warnings;
+        assert_eq!(w.len(), 4, "{w:?}");
+        assert!(w[0].contains("../fuera"));
+        assert!(w[1].contains("dir"));
+        assert!(
+            w[2].contains("`.env`") && w[2].contains(".gitignore"),
+            "{w:?}"
+        );
+        assert!(w[3].contains("`conf/local.toml`"), "{w:?}");
 
         let tasks = f.ws.tasks().unwrap();
         assert_eq!(tasks.len(), 1);
         assert_eq!(&tasks[0], t);
         assert!(f.ws.orphan_worktrees().unwrap().is_empty());
+    }
+
+    #[test]
+    fn copy_files_ignorados_no_avisan() {
+        let f = fixture("default_agent = \"fake\"\ncopy_files = [\"./.env\", \"notas.txt\"]\n[agents.fake]\ncommand = \"x\"\n");
+        std::fs::write(f.root.join(".gitignore"), ".env\n").unwrap();
+        testutil::git(&f.root, &["add", ".gitignore"]);
+        testutil::commit(&f.root, "ignorar .env");
+        std::fs::write(f.root.join(".env"), "S=1").unwrap();
+        std::fs::write(f.root.join("notas.txt"), "n").unwrap();
+        let created = f.ws.create_task(new("t")).unwrap();
+        assert_eq!(created.warnings.len(), 1, "{:?}", created.warnings);
+        assert!(created.warnings[0].contains("`notas.txt`"));
+        assert!(created.task.worktree.join(".env").is_file());
     }
 
     #[test]
