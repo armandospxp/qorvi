@@ -32,6 +32,13 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - El coste y el título de la sesión se guardan en la tarea (`qorvi ls --json`).
 - `qorvi new` avisa si un archivo de `copy_files` no está en `.gitignore` (aparecería como cambio de la tarea).
 - Opción `[keys] style` en la config; `QORVI_KEYS` sigue teniendo prioridad.
+- **La app**: `qorvi` sin argumentos, dentro de un repositorio, abre la interfaz real. Cada tarea tiene su agente ACP (que reanuda su sesión), su editor y su terminal en PTY, y el explorador con las marcas de git.
+- Chat con el agente: mensajes en streaming, herramientas, permisos, cancelación (Esc) y cambio de modo de permisos (Shift+Tab); coste y título en la barra de estado y en `tasks.json`.
+- Editor y terminal reales: teclado, ratón, rueda, pegado y cursor; Enter reabre un programa que terminó; abrir archivos desde el explorador.
+- Review con el diff real de la tarea: commit, merge en la rama base, push + PR con `gh` y descartar la tarea.
+- Avisos de tareas en segundo plano (terminó, falló, pide permiso).
+- Aviso, una vez por sesión, si la terminal escribe símbolos (`˙`, `∆`…) en lugar de enviar Alt.
+- Pegado con bracketed paste en el chat, el diálogo de tarea nueva y los paneles.
 
 ### Cambiado
 - Las dependencias se compilan optimizadas también en debug: los tests de la TUI pasan de ~90 s a ~10 s.

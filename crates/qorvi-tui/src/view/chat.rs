@@ -97,6 +97,7 @@ pub fn history(task: &Task, width: usize, ascii: bool) -> History {
                 kind,
                 status,
                 expanded,
+                ..
             } => {
                 let fold = match (*expanded, ascii) {
                     (true, false) => "▾",
@@ -129,6 +130,7 @@ pub fn history(task: &Task, width: usize, ascii: bool) -> History {
                 options,
                 selected,
                 resolved,
+                ..
             } => {
                 let sym = status_symbol(crate::state::AgentStatus::NeedsPermission, ascii);
                 match resolved {
@@ -161,7 +163,7 @@ pub fn history(task: &Task, width: usize, ascii: bool) -> History {
                         ));
                     }
                     Some(r) => {
-                        let opt = options.get(*r).map_or("?", String::as_str);
+                        let opt = options.get(*r).map_or("descartado", String::as_str);
                         let ok = status_symbol(crate::state::AgentStatus::Done, ascii);
                         out.push(Line::styled(
                             truncate(&format!("{ok} Permiso: {title} → {opt}"), width),

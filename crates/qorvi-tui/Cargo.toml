@@ -6,7 +6,11 @@ license.workspace = true
 
 [dependencies]
 crossterm = "0.29"
+qorvi-acp = { path = "../qorvi-acp" }
+qorvi-core = { path = "../qorvi-core" }
+qorvi-pty = { path = "../qorvi-pty" }
 ratatui = "0.30"
 
 [dev-dependencies]
 insta = "1.49.0"
+tempfile = "3.27.0"

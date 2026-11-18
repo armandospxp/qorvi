@@ -80,7 +80,8 @@ pub fn map_key(state: &AppState, key: KeyEvent) -> Action {
     if let Some(action) = direct_action(state.direct_mod, &key) {
         return action;
     }
-    if key.modifiers == KeyModifiers::NONE {
+    // F5–F8 simulan estados del agente: solo en la demo (en la app llegan al panel).
+    if state.demo && key.modifiers == KeyModifiers::NONE {
         match key.code {
             KeyCode::F(5) => return Action::DemoSetStatus(AgentStatus::Working),
             KeyCode::F(6) => return Action::DemoSetStatus(AgentStatus::NeedsPermission),

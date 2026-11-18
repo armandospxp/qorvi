@@ -6,10 +6,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
+use super::term::Screens;
 use super::{chat, explorer, fg, truncate};
 use crate::layout;
 use crate::shortcuts::shortcut_label;
-use crate::state::{AppState, Pane};
+use crate::state::{AppState, Modal, Pane};
 use crate::theme::{color, status_label, status_symbol, Token};
 
 pub fn pane_block(title: &str, focused: bool, width: u16) -> Block<'static> {
@@ -30,17 +31,70 @@ pub fn pane_block(title: &str, focused: bool, width: u16) -> Block<'static> {
         .title(Span::styled(title, title_style))
 }
 
-pub fn render_pane(state: &AppState, frame: &mut Frame, area: Rect, pane: Pane) {
+pub fn render_pane(
+    state: &AppState,
+    frame: &mut Frame,
+    area: Rect,
+    pane: Pane,
+    screens: &dyn Screens,
+) {
     if area.width == 0 || area.height == 0 {
         return;
     }
     let focused = state.focus == pane;
     match pane {
         Pane::Explorer => explorer::render(state, frame, area, focused),
+        Pane::Editor | Pane::Terminal if !state.demo => {
+            render_real(state, frame, area, pane, focused, screens)
+        }
         Pane::Editor => render_editor(state, frame, area, focused),
         Pane::Terminal => render_terminal(state, frame, area, focused),
         Pane::Agent => chat::render(state, frame, area, focused),
     }
+}
+
+/// Editor o terminal de la app real: la pantalla del programa, o un aviso si no corre.
+fn render_real(
+    state: &AppState,
+    frame: &mut Frame,
+    area: Rect,
+    pane: Pane,
+    focused: bool,
+    screens: &dyn Screens,
+) {
+    let task = state.active_task();
+    let title = match (pane, task.and_then(|t| t.editor_file.as_deref())) {
+        (Pane::Editor, Some(file)) => format!(" {} · {file} ", state.editor_name),
+        (Pane::Editor, None) => format!(" {} ", state.editor_name),
+        _ => format!(" {} ", state.shell_name),
+    };
+    let block = pane_block(&title, focused, area.width);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let Some(task) = task else {
+        return;
+    };
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+    let note = match pane {
+        Pane::Editor => task.editor_note.as_deref(),
+        _ => task.terminal_note.as_deref(),
+    };
+    if note.is_none() {
+        if let Some(cursor) = screens.draw(&task.name, pane, inner, frame.buffer_mut()) {
+            if let (Some(pos), true, true) = (cursor, focused, state.modal == Modal::None) {
+                frame.set_cursor_position(pos);
+            }
+            return;
+        }
+    }
+    let text = note.unwrap_or("Iniciando…");
+    let lines: Vec<Line> = super::wrap(text, usize::from(inner.width))
+        .into_iter()
+        .map(|l| Line::styled(l, fg(Token::Muted)))
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn render_editor(state: &AppState, frame: &mut Frame, area: Rect, focused: bool) {

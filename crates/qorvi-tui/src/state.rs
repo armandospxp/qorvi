@@ -47,6 +47,8 @@ pub enum ChatItem {
     User(String),
     Agent(String),
     ToolCall {
+        /// Id de la herramienta en el agente (vacío en la demo).
+        id: String,
         title: String,
         kind: String,
         status: ToolStatus,
@@ -56,9 +58,27 @@ pub enum ChatItem {
         title: String,
         options: Vec<String>,
         selected: usize,
+        /// Opción elegida; `Some(options.len())` = descartado sin elegir.
         resolved: Option<usize>,
+        /// Petición real del agente (`None` en la demo).
+        request: Option<PermissionRef>,
     },
     Notice(String),
+}
+
+/// Petición de permiso del agente a la que responde un [`ChatItem::Permission`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermissionRef {
+    pub id: u64,
+    /// Ids de las opciones, en el mismo orden que `options`.
+    pub option_ids: Vec<String>,
+}
+
+/// Modo de permisos del agente (id y nombre visible).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMode {
+    pub id: String,
+    pub name: String,
 }
 
 /// Marca de cambio de un archivo en el explorador (como `git status`).
@@ -115,6 +135,15 @@ pub struct Task {
     pub editor_file: Option<String>,
     /// Líneas del historial del chat por encima del final (0 = pegado al final).
     pub chat_scroll: usize,
+    /// Título de la sesión que da el agente.
+    pub title: Option<String>,
+    /// Modo de permisos actual y los disponibles (vacío si el agente no tiene modos).
+    pub mode: Option<String>,
+    pub modes: Vec<AgentMode>,
+    /// Mensaje en lugar del editor o la terminal cuando su programa no corre
+    /// (p. ej. «nvim terminó · Enter lo reinicia»). Solo en la app real.
+    pub editor_note: Option<String>,
+    pub terminal_note: Option<String>,
 }
 
 impl Task {
@@ -138,6 +167,11 @@ impl Task {
             explorer: ExplorerState::default(),
             editor_file: None,
             chat_scroll: 0,
+            title: None,
+            mode: None,
+            modes: Vec::new(),
+            editor_note: None,
+            terminal_note: None,
         }
     }
 }
@@ -242,6 +276,11 @@ pub struct AppState {
     pub toasts: Vec<Toast>,
     pub last_toast: Option<Toast>,
     pub agents: Vec<String>,
+    /// Rama base que propone el diálogo de tarea nueva.
+    pub default_base: String,
+    /// Nombre del editor y de la shell para los títulos de los paneles.
+    pub editor_name: String,
+    pub shell_name: String,
     pub demo: bool,
     pub should_quit: bool,
     pub ascii: bool,
@@ -251,6 +290,8 @@ pub struct AppState {
     pub direct_mod: KeyModifiers,
     /// Se pulsó `Ctrl+Space` y falta la tecla del atajo.
     pub prefix_pending: bool,
+    /// Ya se avisó de que la terminal no envía Alt (una vez por sesión).
+    pub alt_warned: bool,
     /// Lo fija el bucle de eventos según el tamaño de la terminal; `update` lo
     /// necesita para saber si Alt+h/l recorren paneles (layout compacto).
     pub compact: bool,
