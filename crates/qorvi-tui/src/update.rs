@@ -13,8 +13,8 @@ use crate::demo::fake_changes;
 use crate::explorer::{visible_rows, RowKind};
 use crate::layout::{self, Areas};
 use crate::state::{
-    AgentMode, AgentStatus, AppState, ChatItem, ConfirmAction, Modal, Pane, PermissionRef, Task,
-    ToastLevel, ToolStatus,
+    AgentMode, AgentStatus, AppState, ChatItem, ConfirmAction, Modal, Pane, PermissionRef,
+    PlanEntry, PlanState, Task, ToastLevel, ToolStatus,
 };
 use crate::view::{chat, explorer as explorer_view, modals, review, Tier};
 
@@ -708,7 +708,38 @@ fn agent_event(state: &mut AppState, name: &str, ev: AgentEvent, fx: &mut Vec<Ef
         }
         AgentEvent::UserChunk(t) => append_chunk(task, t, true),
         AgentEvent::MessageChunk(t) => append_chunk(task, t, false),
-        AgentEvent::ThoughtChunk(_) | AgentEvent::Plan(_) | AgentEvent::Stderr(_) => {}
+        AgentEvent::ThoughtChunk(t) => match task.chat.last_mut() {
+            Some(ChatItem::Thought(prev)) => prev.push_str(&t),
+            _ => task.chat.push(ChatItem::Thought(t)),
+        },
+        AgentEvent::Plan(items) => {
+            let entries: Vec<PlanEntry> = items
+                .into_iter()
+                .map(|i| PlanEntry {
+                    content: i.content,
+                    state: match i.status {
+                        qorvi_acp::PlanStatus::Pending => PlanState::Pending,
+                        qorvi_acp::PlanStatus::InProgress => PlanState::InProgress,
+                        qorvi_acp::PlanStatus::Completed => PlanState::Completed,
+                    },
+                })
+                .collect();
+            // El plan del turno se actualiza en su sitio (desde el último mensaje del usuario).
+            let since = task
+                .chat
+                .iter()
+                .rposition(|c| matches!(c, ChatItem::User(_)))
+                .map_or(0, |i| i + 1);
+            let existing = task.chat[since..]
+                .iter()
+                .position(|c| matches!(c, ChatItem::Plan(_)))
+                .map(|i| i + since);
+            match existing {
+                Some(i) => task.chat[i] = ChatItem::Plan(entries),
+                None => task.chat.push(ChatItem::Plan(entries)),
+            }
+        }
+        AgentEvent::Stderr(_) => {}
         AgentEvent::ToolCall(tc) => task.chat.push(ChatItem::ToolCall {
             id: tc.id,
             title: tc.title,
@@ -2863,5 +2894,82 @@ mod busy_tests {
         // Sin operación en curso se sale a la primera.
         let mut s = review_open();
         assert_eq!(update(&mut s, Action::Quit), vec![Effect::Quit]);
+    }
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::*;
+    use crate::demo::demo_state;
+    use qorvi_acp::{PlanItem, PlanStatus};
+
+    fn plan(items: &[(&str, PlanStatus)]) -> AgentEvent {
+        AgentEvent::Plan(
+            items
+                .iter()
+                .map(|(c, s)| PlanItem {
+                    content: c.to_string(),
+                    status: *s,
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn plan_se_actualiza_en_su_sitio_y_razonamiento_se_acumula() {
+        let mut s = demo_state();
+        s.demo = false;
+        let name = s.tasks[0].name.clone();
+        s.tasks[0].chat = vec![ChatItem::User("hazlo".into())];
+        let mut ev = |e| update(&mut s, Action::Agent(name.clone(), e));
+        ev(AgentEvent::ThoughtChunk("Pienso ".into()));
+        ev(AgentEvent::ThoughtChunk("mucho".into()));
+        ev(plan(&[
+            ("leer", PlanStatus::InProgress),
+            ("editar", PlanStatus::Pending),
+        ]));
+        ev(AgentEvent::MessageChunk("ok".into()));
+        ev(plan(&[
+            ("leer", PlanStatus::Completed),
+            ("editar", PlanStatus::InProgress),
+        ]));
+        let chat = &s.tasks[0].chat;
+        assert_eq!(chat.len(), 4, "{chat:?}");
+        assert_eq!(chat[1], ChatItem::Thought("Pienso mucho".into()));
+        assert!(
+            matches!(&chat[2], ChatItem::Plan(p) if p[0].state == PlanState::Completed && p[1].state == PlanState::InProgress)
+        );
+        // Un turno nuevo empieza un plan nuevo.
+        s.tasks[0].chat.push(ChatItem::User("otra".into()));
+        update(
+            &mut s,
+            Action::Agent(name.clone(), plan(&[("x", PlanStatus::Pending)])),
+        );
+        let n = s.tasks[0]
+            .chat
+            .iter()
+            .filter(|c| matches!(c, ChatItem::Plan(_)))
+            .count();
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn razonamiento_largo_se_recorta_al_dibujar() {
+        let mut t = Task::new("t", "a", "main");
+        t.chat = vec![
+            ChatItem::Thought("uno\ndos\ntres\ncuatro\ncinco".into()),
+            ChatItem::Plan(vec![PlanEntry {
+                content: "paso".into(),
+                state: PlanState::Completed,
+            }]),
+        ];
+        let text: Vec<String> = chat::history_lines(&t, 40, false)
+            .iter()
+            .map(|l| l.to_string())
+            .collect();
+        assert!(text[0].contains("2 líneas antes"), "{text:?}");
+        assert!(text.iter().any(|l| l.contains("cinco")));
+        assert!(!text.iter().any(|l| l.contains("uno")));
+        assert!(text.iter().any(|l| l.contains("✓ paso")));
     }
 }

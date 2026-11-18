@@ -64,6 +64,23 @@ pub enum ChatItem {
         request: Option<PermissionRef>,
     },
     Notice(String),
+    /// Razonamiento del agente (se muestra atenuado y recortado).
+    Thought(String),
+    /// Plan del agente: cada entrada con su estado. Un plan nuevo sustituye al del turno.
+    Plan(Vec<PlanEntry>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanState {
+    Pending,
+    InProgress,
+    Completed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanEntry {
+    pub content: String,
+    pub state: PlanState,
 }
 
 /// Petición de permiso del agente a la que responde un [`ChatItem::Permission`].

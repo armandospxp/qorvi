@@ -8,7 +8,10 @@ use ratatui::Frame;
 
 use super::panes::pane_block;
 use super::{bold, fg, truncate, wrap};
-use crate::state::{AppState, ChatItem, Modal, Task, ToolStatus};
+use crate::state::{AppState, ChatItem, Modal, PlanState, Task, ToolStatus};
+
+/// Líneas que se muestran del razonamiento del agente (las últimas).
+const THOUGHT_LINES: usize = 3;
 use crate::theme::{color, status_label, status_symbol, Token};
 
 fn tool_status(status: ToolStatus, ascii: bool) -> (&'static str, &'static str, Token) {
@@ -170,6 +173,56 @@ pub fn history(task: &Task, width: usize, ascii: bool) -> History {
                             fg(Token::Muted),
                         ));
                     }
+                }
+            }
+            ChatItem::Thought(t) => {
+                let style = fg(Token::Muted).add_modifier(ratatui::style::Modifier::ITALIC);
+                let mut lines = Vec::new();
+                let p = if ascii { "~ " } else { "∴ " };
+                wrapped(
+                    &mut lines,
+                    p,
+                    "  ",
+                    t.trim(),
+                    width,
+                    style,
+                    fg(Token::Muted),
+                );
+                if lines.len() > THOUGHT_LINES {
+                    let skip = lines.len() - THOUGHT_LINES;
+                    lines.drain(..skip);
+                    out.push(Line::styled(
+                        truncate(&format!("{p}… ({skip} líneas antes)"), width),
+                        fg(Token::Muted),
+                    ));
+                }
+                out.extend(lines);
+            }
+            ChatItem::Plan(entries) => {
+                out.push(Line::styled(truncate("Plan", width), bold(Token::Text)));
+                for e in entries {
+                    let (sym, token) = match (e.state, ascii) {
+                        (PlanState::Completed, false) => ("✓", Token::Accent),
+                        (PlanState::InProgress, false) => ("●", Token::Info),
+                        (PlanState::Pending, false) => ("○", Token::Muted),
+                        (PlanState::Completed, true) => ("x", Token::Accent),
+                        (PlanState::InProgress, true) => ("*", Token::Info),
+                        (PlanState::Pending, true) => ("-", Token::Muted),
+                    };
+                    let text = if e.state == PlanState::Completed {
+                        fg(Token::Muted)
+                    } else {
+                        fg(Token::Text)
+                    };
+                    wrapped(
+                        &mut out,
+                        &format!("  {sym} "),
+                        "    ",
+                        &e.content,
+                        width,
+                        text,
+                        fg(token),
+                    );
                 }
             }
             ChatItem::Notice(t) => {
