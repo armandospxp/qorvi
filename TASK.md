@@ -55,12 +55,14 @@ _Última actualización: 2026-11-17_
 - [x] Modo de permisos del agente visible y configurable (`mode` por agente) · Opus
 - [x] Coste y título de sesión por tarea (`Workspace::record_session`) · Opus
 
-## Fase 4: aplicación completa (`qorvi-tui`)
+## Fase 4: aplicación completa (`qorvi-tui`) 🚧
 
-- [ ] Conectar el mockup a core, PTY y ACP
-- [ ] Probar `qorvi-acp` con Claude Code real dentro de la app (reanudar, cancelar, modos, coste) · Usuario
-- [ ] Notificaciones de tareas en segundo plano
-- [ ] Aviso si la terminal no envía Alt
+- [x] Conectar el mockup a core, PTY y ACP (`qorvi` sin argumentos abre la app) · Opus
+- [x] Notificaciones de tareas en segundo plano (avisos al terminar, fallar o pedir permiso) · Opus
+- [x] Aviso si la terminal no envía Alt · Opus
+- [x] Prueba de punta a punta en tmux con el agente fixture: crear, permiso, fs, explorador, terminal, review, commit, merge, descartar · Opus
+- [ ] Probar la app con Claude Code real (reanudar, cancelar, modos, coste) · Usuario
+- [ ] Probar la app en macOS y Windows · Usuario
 
 ## Mejoras detectadas
 
@@ -68,6 +70,10 @@ _Última actualización: 2026-11-17_
 - [x] Avisar en `qorvi new` si un archivo de `copy_files` no está en `.gitignore` · Opus
 - [ ] Al cerrar un agente, matar también sus procesos hijos (hoy se cierra su stdin y se mata solo el proceso directo; p. ej. `npx` → `node`) · Sonnet
 - [ ] Añadir a la config de ejemplo los comandos reales de Claude Code y Codex por ACP · Usuario
+- [ ] Merge, push y PR en segundo plano (hoy bloquean la interfaz mientras duran) · Sonnet
+- [ ] Mostrar el plan del agente (`Plan`) y su razonamiento en el chat · Sonnet
+- [ ] Persistir el chat (hoy solo se recupera si el agente repite el historial al reanudar) · Sonnet
+- [ ] Ayuda (`?`): añadir Shift+Tab (modo) y Enter (reabrir panel) · Haiku
 - [ ] Probar la CLI y los tests de git en macOS y Windows (canonicalización de rutas, `NUL`) · Usuario
 - [ ] Probar `gh` real: `create_pr` y `pr_for_branch` · Usuario
 

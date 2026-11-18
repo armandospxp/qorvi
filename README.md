@@ -2,7 +2,8 @@
 
 IDE de terminal, escrito en Rust, para trabajar con varios agentes de IA en paralelo.
 
-> **Estado: en desarrollo temprano.** Todavía no hay una versión usable.
+> **Estado: primera versión en pruebas.** La app funciona de punta a punta, pero aún no
+> se ha probado con agentes reales en todas las plataformas.
 
 ## Qué será
 
@@ -25,10 +26,26 @@ Cada **tarea** tiene su propio git worktree, su propio agente y un layout fijo:
 - Al terminar una tarea: revisas el diff y luego haces merge, abres una PR o la descartas.
 - macOS, Linux y Windows nativo, sin tmux.
 
-## Uso (CLI)
+## Uso
 
-La app completa todavía no existe, pero ya puedes gestionar tareas desde la línea de
-comandos dentro de un repositorio git:
+Dentro de un repositorio git, `qorvi` abre la app. Necesitas al menos un agente ACP en
+la config (ver [`examples/config.example.toml`](examples/config.example.toml)).
+
+- **Tareas**: `n` (con el prefijo, ver abajo) crea una; `1`…`9` cambia entre ellas. Al
+  activar una tarea arrancan su agente (reanudando su sesión), su editor y su terminal.
+- **Agente**: Enter envía, Esc cancela el turno, ↑/↓ + Enter responde a un permiso y
+  Shift+Tab cambia el modo de permisos del agente.
+- **Editor y terminal**: reciben teclado, ratón y pegado. Si el programa termina, Enter
+  lo vuelve a abrir. Enter en el explorador abre el archivo en el editor.
+- **Review** (`d`): diff real de la tarea; `c` commit, `m` merge en la rama base (en el
+  árbol principal, que debe estar en esa rama), `p` push + PR con `gh`, `x` descartar.
+- **Atajos**: `Ctrl+Space` + tecla (o `Alt`+tecla, o `Cmd`/`Ctrl` directos si la terminal
+  los envía). `Ctrl+Space ?` muestra todos. `qorvi doctor keys` diagnostica la terminal.
+
+Las tareas que trabajan en segundo plano avisan cuando terminan, fallan o piden permiso.
+Las operaciones de git y `gh` (merge, push, PR) bloquean la interfaz mientras duran.
+
+También puedes gestionar tareas desde la línea de comandos:
 
 ```bash
 qorvi new APP-12                 # rama APP-12 + worktree, desde la rama actual
@@ -47,8 +64,8 @@ macOS, `%APPDATA%\qorvi\data\` en Windows), para que herramientas como cargo o n
 detecten el proyecto padre. La lista de tareas se guarda en `.git/qorvi/tasks.json`.
 `QORVI_CONFIG_DIR` y `QORVI_DATA_DIR` cambian ambos directorios.
 
-Otros comandos: `qorvi --demo` (mockup de la interfaz) y `qorvi doctor keys` (diagnóstico de
-atajos de la terminal).
+Otros comandos: `qorvi --demo` (la interfaz con datos falsos) y `qorvi doctor keys`
+(diagnóstico de atajos de la terminal).
 
 ## Seguridad
 
