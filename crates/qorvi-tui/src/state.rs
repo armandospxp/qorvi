@@ -292,6 +292,12 @@ pub struct AppState {
     pub prefix_pending: bool,
     /// Ya se avisó de que la terminal no envía Alt (una vez por sesión).
     pub alt_warned: bool,
+    /// Operación de git en curso en segundo plano (merge, push + PR), con su texto.
+    pub busy: Option<String>,
+    /// Fotograma del spinner de `busy` (avanza con cada tick).
+    pub spinner: usize,
+    /// Se pidió salir con una operación en curso: el siguiente «salir» sale igualmente.
+    pub quit_armed: bool,
     /// Lo fija el bucle de eventos según el tamaño de la terminal; `update` lo
     /// necesita para saber si Alt+h/l recorren paneles (layout compacto).
     pub compact: bool,
@@ -303,6 +309,17 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Fotograma actual del spinner de las operaciones en segundo plano.
+    pub fn spinner_frame(&self) -> &'static str {
+        const UNICODE: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        const ASCII: [&str; 4] = ["|", "/", "-", "\\"];
+        if self.ascii {
+            ASCII[self.spinner % ASCII.len()]
+        } else {
+            UNICODE[self.spinner % UNICODE.len()]
+        }
+    }
+
     /// ¿Se dibuja el explorador como columna? (en compacto es una pestaña).
     pub fn explorer_visible(&self) -> bool {
         !self.compact && (self.explorer_default ^ self.explorer_toggled)

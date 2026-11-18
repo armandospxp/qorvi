@@ -3,8 +3,8 @@
 //!
 //! Todo lo que llega de fuera (teclado, salida de los paneles, eventos de los agentes)
 //! entra por un único canal; el hilo principal lo convierte en acciones, llama a
-//! `update` y ejecuta los efectos. Las operaciones de git y `gh` son síncronas: bloquean
-//! la interfaz mientras duran (merge, push y PR pueden tardar unos segundos).
+//! `update` y ejecuta los efectos. Merge y push + PR, que pueden tardar, corren en un hilo
+//! aparte (con un spinner en la barra de estado); el resto de git es rápido y síncrono.
 
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -463,16 +463,18 @@ impl Runtime {
                 self.refresh_files(&name, queue);
             }
             Effect::Merge(name) => {
-                let r = self.merge(&name);
-                match r {
-                    Ok(msg) => toast(queue, msg, ToastLevel::Info),
-                    Err(msg) => toast(queue, msg, ToastLevel::Error),
-                }
+                let main = self.ws.git();
+                self.in_background(&name, queue, move |task| merge(&main, &task));
             }
-            Effect::PullRequest(name) => match self.pull_request(&name, state) {
-                Ok(msg) => toast(queue, msg, ToastLevel::Info),
-                Err(msg) => toast(queue, msg, ToastLevel::Error),
-            },
+            Effect::PullRequest(name) => {
+                let title = state
+                    .tasks
+                    .iter()
+                    .find(|x| x.name == name)
+                    .and_then(|x| x.title.clone())
+                    .unwrap_or_else(|| name.clone());
+                self.in_background(&name, queue, move |task| pull_request(&task, &title));
+            }
             Effect::RecordSession(name, info) => {
                 if let Some(id) = &info.session_id {
                     if let Some(t) = self.tasks.get_mut(&name) {
@@ -715,75 +717,37 @@ impl Runtime {
         }
     }
 
-    /// Integra la rama de la tarea en su rama base, en el árbol principal.
-    fn merge(&self, name: &str) -> Result<String, String> {
-        let t = self.tasks.get(name).ok_or("tarea desconocida")?;
-        if !Git::new(&t.task.worktree)
-            .is_clean()
-            .map_err(|e| e.to_string())?
-        {
-            return Err(format!(
-                "{name} tiene cambios sin commitear: haz commit (c) antes del merge"
+    /// Ejecuta `op` (merge, push…) en un hilo para no bloquear la interfaz; el
+    /// resultado llega como `BusyDone`. `update` ya marcó la operación como en curso.
+    fn in_background(
+        &self,
+        name: &str,
+        queue: &mut VecDeque<Action>,
+        op: impl FnOnce(CoreTask) -> Result<String, String> + Send + 'static,
+    ) {
+        let Some(task) = self.tasks.get(name).map(|t| t.task.clone()) else {
+            queue.push_back(Action::BusyDone(
+                format!("La tarea {name} ya no existe"),
+                ToastLevel::Error,
+            ));
+            return;
+        };
+        let tx = self.tx.clone();
+        let spawned = std::thread::Builder::new()
+            .name("qorvi-git".into())
+            .spawn(move || {
+                let done = match op(task) {
+                    Ok(msg) => Action::BusyDone(msg, ToastLevel::Info),
+                    Err(msg) => Action::BusyDone(msg, ToastLevel::Error),
+                };
+                let _ = tx.send(Msg::Action(done));
+            });
+        if let Err(e) = spawned {
+            queue.push_back(Action::BusyDone(
+                format!("No se pudo lanzar la operación: {e}"),
+                ToastLevel::Error,
             ));
         }
-        let git = self.ws.git();
-        let current = git.current_branch().map_err(|e| e.to_string())?;
-        if current.as_deref() != Some(t.task.base_ref.as_str()) {
-            return Err(format!(
-                "El repositorio principal está en {} y no en {}: cámbialo antes del merge",
-                current.as_deref().unwrap_or("(HEAD separado)"),
-                t.task.base_ref
-            ));
-        }
-        let sha = git
-            .merge_branch(&t.task.branch, MergeStyle::Merge, &format!("Merge: {name}"))
-            .map_err(|e| format!("No se hizo el merge: {e}"))?;
-        Ok(format!(
-            "{name} integrada en {} ({})",
-            t.task.base_ref,
-            short(&sha)
-        ))
-    }
-
-    /// Sube la rama y abre un PR hacia la rama base con `gh`.
-    fn pull_request(&self, name: &str, state: &AppState) -> Result<String, String> {
-        let t = self.tasks.get(name).ok_or("tarea desconocida")?;
-        let git = Git::new(&t.task.worktree);
-        if !git.is_clean().map_err(|e| e.to_string())? {
-            return Err(format!(
-                "{name} tiene cambios sin commitear: haz commit (c) antes del PR"
-            ));
-        }
-        let remote = git
-            .remotes()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .find(|r| r == "origin")
-            .ok_or("El repositorio no tiene el remoto `origin`")?;
-        git.push(&remote, &t.task.branch, true)
-            .map_err(|e| format!("No se pudo hacer push: {e}"))?;
-        let gh = Gh::new(&t.task.worktree);
-        if let Ok(Some(pr)) = gh.pr_for_branch(&t.task.branch) {
-            if pr.state == "OPEN" {
-                return Ok(format!("Rama subida; PR ya abierto: {}", pr.url));
-            }
-        }
-        let title = state
-            .tasks
-            .iter()
-            .find(|x| x.name == name)
-            .and_then(|x| x.title.clone())
-            .unwrap_or_else(|| name.to_string());
-        let url = gh
-            .create_pr(
-                &t.task.base_ref,
-                &t.task.branch,
-                &title,
-                "Creado con qorvi.",
-                false,
-            )
-            .map_err(|e| format!("No se pudo crear el PR: {e}"))?;
-        Ok(format!("PR creado: {url}"))
     }
 
     /// Cierra los agentes (esperando a que salgan) y los paneles.
@@ -794,6 +758,70 @@ impl Runtime {
             }
         }
     }
+}
+
+/// Integra la rama de la tarea en su rama base, en el árbol principal (`main`).
+fn merge(main: &Git, task: &CoreTask) -> Result<String, String> {
+    let name = task.name.as_str();
+    if !Git::new(&task.worktree)
+        .is_clean()
+        .map_err(|e| e.to_string())?
+    {
+        return Err(format!(
+            "{name} tiene cambios sin commitear: haz commit (c) antes del merge"
+        ));
+    }
+    let current = main.current_branch().map_err(|e| e.to_string())?;
+    if current.as_deref() != Some(task.base_ref.as_str()) {
+        return Err(format!(
+            "El repositorio principal está en {} y no en {}: cámbialo antes del merge",
+            current.as_deref().unwrap_or("(HEAD separado)"),
+            task.base_ref
+        ));
+    }
+    let sha = main
+        .merge_branch(&task.branch, MergeStyle::Merge, &format!("Merge: {name}"))
+        .map_err(|e| format!("No se hizo el merge: {e}"))?;
+    Ok(format!(
+        "{name} integrada en {} ({})",
+        task.base_ref,
+        short(&sha)
+    ))
+}
+
+/// Sube la rama y abre un PR hacia la rama base con `gh` (o da el que ya está abierto).
+fn pull_request(task: &CoreTask, title: &str) -> Result<String, String> {
+    let name = task.name.as_str();
+    let git = Git::new(&task.worktree);
+    if !git.is_clean().map_err(|e| e.to_string())? {
+        return Err(format!(
+            "{name} tiene cambios sin commitear: haz commit (c) antes del PR"
+        ));
+    }
+    let remote = git
+        .remotes()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|r| r == "origin")
+        .ok_or("El repositorio no tiene el remoto `origin`")?;
+    git.push(&remote, &task.branch, true)
+        .map_err(|e| format!("No se pudo hacer push: {e}"))?;
+    let gh = Gh::new(&task.worktree);
+    if let Ok(Some(pr)) = gh.pr_for_branch(&task.branch) {
+        if pr.state == "OPEN" {
+            return Ok(format!("Rama subida; PR ya abierto: {}", pr.url));
+        }
+    }
+    let url = gh
+        .create_pr(
+            &task.base_ref,
+            &task.branch,
+            title,
+            "Creado con qorvi.",
+            false,
+        )
+        .map_err(|e| format!("No se pudo crear el PR: {e}"))?;
+    Ok(format!("PR creado: {url}"))
 }
 
 fn short(sha: &str) -> &str {

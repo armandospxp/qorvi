@@ -43,7 +43,8 @@ la config (ver [`examples/config.example.toml`](examples/config.example.toml)).
   los envía). `Ctrl+Space ?` muestra todos. `qorvi doctor keys` diagnostica la terminal.
 
 Las tareas que trabajan en segundo plano avisan cuando terminan, fallan o piden permiso.
-Las operaciones de git y `gh` (merge, push, PR) bloquean la interfaz mientras duran.
+Merge y push + PR corren en segundo plano, con un spinner en la barra de estado; mientras
+duran no se puede lanzar otra operación de la review y salir pide confirmación.
 
 También puedes gestionar tareas desde la línea de comandos:
 

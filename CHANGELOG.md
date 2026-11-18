@@ -37,6 +37,7 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Editor y terminal reales: teclado, ratón, rueda, pegado y cursor; Enter reabre un programa que terminó; abrir archivos desde el explorador.
 - Review con el diff real de la tarea: commit, merge en la rama base, push + PR con `gh` y descartar la tarea.
 - Avisos de tareas en segundo plano (terminó, falló, pide permiso).
+- Merge y push + PR corren en segundo plano con un spinner en la barra de estado y en la review; la interfaz sigue respondiendo, no se puede lanzar otra operación hasta que acabe y salir pide confirmación.
 - Aviso, una vez por sesión, si la terminal escribe símbolos (`˙`, `∆`…) en lugar de enviar Alt.
 - Pegado con bracketed paste en el chat, el diálogo de tarea nueva y los paneles.
 
