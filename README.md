@@ -29,7 +29,16 @@ Cada **tarea** tiene su propio git worktree, su propio agente y un layout fijo:
 ## Uso
 
 Dentro de un repositorio git, `qorvi` abre la app. Necesitas al menos un agente ACP en
-la config (ver [`examples/config.example.toml`](examples/config.example.toml)).
+la config (ver [`examples/config.example.toml`](examples/config.example.toml)). Para
+Claude Code: `npm install -g @agentclientprotocol/claude-agent-acp` (Node ≥ 20) y
+
+```toml
+default_agent = "claude"
+
+[agents.claude]
+command = "claude-agent-acp"
+mode = "default"   # pide permiso para editar; sin esto empieza en "auto"
+```
 
 - **Tareas**: `n` (con el prefijo, ver abajo) crea una; `1`…`9` cambia entre ellas. Al
   activar una tarea arrancan su agente (reanudando su sesión), su editor y su terminal.

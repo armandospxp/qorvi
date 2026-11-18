@@ -61,7 +61,8 @@ _Última actualización: 2026-11-18_
 - [x] Notificaciones de tareas en segundo plano (avisos al terminar, fallar o pedir permiso) · Opus
 - [x] Aviso si la terminal no envía Alt · Opus
 - [x] Prueba de punta a punta en tmux con el agente fixture: crear, permiso, fs, explorador, terminal, review, commit, merge, descartar · Opus
-- [ ] Probar la app con Claude Code real (reanudar, cancelar, modos, coste) · Usuario
+- [x] Probar la app con Claude Code real (reanudar, cancelar, modos, permisos, coste, review y merge) · Opus
+- [ ] Probar la app con Claude Code real desde tu terminal y en un proyecto de verdad · Usuario
 - [ ] Probar la app en macOS y Windows · Usuario
 
 ## Mejoras detectadas
@@ -69,7 +70,10 @@ _Última actualización: 2026-11-18_
 - [x] El test `snapshots` de qorvi-tui tardaba ~90 s: ahora ~10 s (dependencias optimizadas en dev) · Opus
 - [x] Avisar en `qorvi new` si un archivo de `copy_files` no está en `.gitignore` · Opus
 - [x] Al cerrar un agente, matar también sus procesos hijos (grupo de procesos en Unix, Job Object en Windows) · Opus
-- [ ] Añadir a la config de ejemplo los comandos reales de Claude Code y Codex por ACP · Usuario
+- [x] Añadir a la config de ejemplo los comandos reales de Claude Code y Codex por ACP · Opus
+- [x] Mostrar el stderr del agente cuando se cierra con error (p. ej. Node demasiado viejo) · Opus
+- [x] Mostrar el modo de permisos actual en el título del panel del agente · Opus
+- [ ] Shift+Tab también pasa por "Bypass permissions": ¿saltarlo o pedir confirmación? · Usuario
 - [x] Merge, push y PR en segundo plano con spinner · Opus
 - [x] Mostrar el plan del agente (`Plan`) y su razonamiento en el chat · Opus
 - [x] Persistir el chat por tarea (`.git/qorvi/chats/`) · Opus
