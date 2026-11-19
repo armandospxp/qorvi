@@ -5,7 +5,7 @@
 
 default_agent = "mi-agente"
 
-# editor = "nvim"                       # por defecto: $VISUAL, $EDITOR
+# editor = "nvim"                       # por defecto: $VISUAL, $EDITOR o el primero de nvim, hx, vim, micro, nano, vi
 # shell = "zsh"                         # por defecto: $SHELL (Windows: pwsh → powershell → cmd)
 copy_files = [".env", ".env.local"]     # se copian al worktree de cada tarea nueva
 # setup = "npm install"                 # se ejecuta en la terminal de cada tarea nueva
