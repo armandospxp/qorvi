@@ -549,11 +549,35 @@ fn agent_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
                 .mode
                 .as_ref()
                 .and_then(|m| task.modes.iter().position(|x| &x.id == m));
-            let next = cur.map_or(0, |i| (i + 1) % task.modes.len());
-            fx.push(Effect::SetMode(
-                task.name.clone(),
-                task.modes[next].id.clone(),
-            ));
+            let n = task.modes.len();
+            let next = cur.map_or(0, |i| (i + 1) % n);
+            let mode = &task.modes[next];
+            if Some(next) != cur && is_dangerous_mode(&mode.id, &mode.name) {
+                // El modo que viene después, si no es el actual ni otro igual de peligroso.
+                let after = (next + 1) % n;
+                let skip = task
+                    .modes
+                    .get(after)
+                    .filter(|m| Some(after) != cur && !is_dangerous_mode(&m.id, &m.name));
+                let then = match skip {
+                    Some(m) => format!("N: pasar a «{}».", m.name),
+                    None => "N: seguir en el modo actual.".to_string(),
+                };
+                state.modal = Modal::Confirm {
+                    message: format!(
+                        "¿Activar «{}»? El agente editará archivos y ejecutará comandos \
+                         sin pedir permiso. {then}",
+                        mode.name
+                    ),
+                    action: ConfirmAction::DangerousMode {
+                        task: task.name.clone(),
+                        mode: mode.id.clone(),
+                        skip: skip.map(|m| m.id.clone()),
+                    },
+                };
+                return;
+            }
+            fx.push(Effect::SetMode(task.name.clone(), mode.id.clone()));
         }
         KeyCode::Up | KeyCode::Down if perm_idx.is_some() => {
             if let Some(ChatItem::Permission {
@@ -1274,19 +1298,43 @@ fn review_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
 }
 
 fn confirm_key(state: &mut AppState, key: KeyEvent, fx: &mut Vec<Effect>) {
-    let Modal::Confirm { action, .. } = state.modal else {
+    let Modal::Confirm { action, .. } = &state.modal else {
         return;
     };
+    let action = action.clone();
     match key.code {
         KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Enter => {
             state.modal = Modal::None;
             match action {
                 ConfirmAction::DiscardTask(idx) => discard_task(state, idx, fx),
+                ConfirmAction::DangerousMode { task, mode, .. } => {
+                    fx.push(Effect::SetMode(task, mode))
+                }
             }
         }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.modal = Modal::None,
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            state.modal = Modal::None;
+            if let ConfirmAction::DangerousMode {
+                task,
+                skip: Some(skip),
+                ..
+            } = action
+            {
+                fx.push(Effect::SetMode(task, skip));
+            }
+        }
         _ => {}
     }
+}
+
+/// Modo de permisos que aprueba todo sin preguntar (Claude Code: `bypassPermissions`;
+/// Codex: acceso total). Se reconoce por el id o el nombre que da el agente.
+fn is_dangerous_mode(id: &str, name: &str) -> bool {
+    let norm = |s: &str| s.to_lowercase().replace(['-', '_'], " ");
+    let (id, name) = (norm(id), norm(name));
+    ["bypass", "full access", "fullaccess", "danger", "yolo"]
+        .iter()
+        .any(|w| id.contains(w) || name.contains(w))
 }
 
 fn discard_task(state: &mut AppState, idx: usize, fx: &mut Vec<Effect>) {
@@ -2677,6 +2725,89 @@ mod real_tests {
         );
         ev(&mut s, "APP-12", AgentEvent::ModeChanged("plan".into()));
         assert_eq!(s.tasks[0].mode.as_deref(), Some("plan"));
+    }
+
+    fn claude_modes(s: &mut AppState, current: &str) {
+        use crate::state::AgentMode;
+        let m = |id: &str, name: &str| AgentMode {
+            id: id.into(),
+            name: name.into(),
+        };
+        s.tasks[0].modes = vec![
+            m("default", "Manual"),
+            m("auto", "Auto"),
+            m("bypassPermissions", "Bypass permissions"),
+        ];
+        s.tasks[0].mode = Some(current.into());
+    }
+
+    #[test]
+    fn pasar_a_bypass_pide_confirmacion() {
+        let mut s = real();
+        claude_modes(&mut s, "auto");
+        assert_eq!(update(&mut s, key(KeyCode::BackTab)), vec![]);
+        let Modal::Confirm { message, .. } = &s.modal else {
+            panic!("esperaba confirmación: {:?}", s.modal);
+        };
+        assert!(message.contains("«Bypass permissions»"), "{message}");
+        assert!(message.contains("pasar a «Manual»"), "{message}");
+        // S confirma.
+        assert_eq!(
+            update(&mut s, key(KeyCode::Char('s'))),
+            vec![Effect::SetMode("APP-12".into(), "bypassPermissions".into())]
+        );
+        assert_eq!(s.modal, Modal::None);
+
+        // N salta al modo siguiente; Esc igual.
+        for k in [KeyCode::Char('n'), KeyCode::Esc] {
+            update(&mut s, key(KeyCode::BackTab));
+            assert_eq!(
+                update(&mut s, key(k)),
+                vec![Effect::SetMode("APP-12".into(), "default".into())]
+            );
+            assert_eq!(s.modal, Modal::None);
+        }
+
+        // Los demás modos no piden confirmación.
+        claude_modes(&mut s, "default");
+        assert_eq!(
+            update(&mut s, key(KeyCode::BackTab)),
+            vec![Effect::SetMode("APP-12".into(), "auto".into())]
+        );
+    }
+
+    #[test]
+    fn bypass_sin_modo_seguro_despues_se_queda() {
+        use crate::state::AgentMode;
+        let mut s = real();
+        s.tasks[0].modes = vec![
+            AgentMode {
+                id: "read-only".into(),
+                name: "Read Only".into(),
+            },
+            AgentMode {
+                id: "full-access".into(),
+                name: "Full Access".into(),
+            },
+        ];
+        s.tasks[0].mode = Some("read-only".into());
+        update(&mut s, key(KeyCode::BackTab));
+        let Modal::Confirm { message, .. } = &s.modal else {
+            panic!("esperaba confirmación: {:?}", s.modal);
+        };
+        assert!(message.contains("seguir en el modo actual"), "{message}");
+        assert_eq!(update(&mut s, key(KeyCode::Esc)), vec![]);
+        assert_eq!(s.tasks[0].mode.as_deref(), Some("read-only"));
+    }
+
+    #[test]
+    fn modos_peligrosos() {
+        assert!(is_dangerous_mode("bypassPermissions", "Bypass permissions"));
+        assert!(is_dangerous_mode("full-access", "Full Access"));
+        assert!(is_dangerous_mode("x", "Danger zone"));
+        assert!(!is_dangerous_mode("acceptEdits", "Accept edits"));
+        assert!(!is_dangerous_mode("auto", "Auto"));
+        assert!(!is_dangerous_mode("default", "Manual"));
     }
 
     #[test]
