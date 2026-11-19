@@ -48,6 +48,7 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Config de ejemplo con los comandos de Claude Code (`claude-agent-acp`) y Codex (`codex-acp`).
 - El título del panel del agente muestra el modo de permisos actual.
 - Si no hay editor configurado ni `$VISUAL`/`$EDITOR`, se usa el primero que haya en el `PATH` de nvim, hx, vim, micro, nano y vi (en Windows, también `edit`).
+- Shift+Tab pide confirmación antes de pasar a un modo que aprueba todo sin preguntar ("Bypass permissions" de Claude Code, acceso total de Codex); si se rechaza, pasa al modo siguiente.
 
 ### Cambiado
 - Las dependencias se compilan optimizadas también en debug: los tests de la TUI pasan de ~90 s a ~10 s.

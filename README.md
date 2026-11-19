@@ -43,7 +43,8 @@ mode = "default"   # pide permiso para editar; sin esto empieza en "auto"
 - **Tareas**: `n` (con el prefijo, ver abajo) crea una; `1`…`9` cambia entre ellas. Al
   activar una tarea arrancan su agente (reanudando su sesión), su editor y su terminal.
 - **Agente**: Enter envía, Esc cancela el turno, ↑/↓ + Enter responde a un permiso y
-  Shift+Tab cambia el modo de permisos del agente.
+  Shift+Tab cambia el modo de permisos del agente (pasar a uno que aprueba todo, como
+  "Bypass permissions", pide confirmación).
 - **Editor y terminal**: el editor es `editor` de la config, `$VISUAL` o `$EDITOR`; si no
   hay ninguno, el primero que encuentre de nvim, hx, vim, micro, nano y vi (en Windows,
   también `edit`). Ambos reciben teclado, ratón y pegado. Si el programa termina, Enter

@@ -74,7 +74,7 @@ _Última actualización: 2026-11-18_
 - [x] Mostrar el stderr del agente cuando se cierra con error (p. ej. Node demasiado viejo) · Opus
 - [x] Mostrar el modo de permisos actual en el título del panel del agente · Opus
 - [x] Editor por defecto si no hay ninguno configurado (busca nvim, hx, vim… en el PATH) · Opus
-- [ ] Shift+Tab también pasa por "Bypass permissions": ¿saltarlo o pedir confirmación? · Usuario
+- [x] Shift+Tab pide confirmación antes de pasar a un modo que aprueba todo ("Bypass permissions", acceso total) · Opus
 - [x] Merge, push y PR en segundo plano con spinner · Opus
 - [x] Mostrar el plan del agente (`Plan`) y su razonamiento en el chat · Opus
 - [x] Persistir el chat por tarea (`.git/qorvi/chats/`) · Opus

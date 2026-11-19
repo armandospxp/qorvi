@@ -233,9 +233,16 @@ pub struct ChangedFile {
     pub diff: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfirmAction {
     DiscardTask(usize),
+    /// Pasar la tarea a un modo que aprueba todo sin preguntar. Si se rechaza, se pasa a
+    /// `skip` (el modo siguiente), o se queda como está si es `None`.
+    DangerousMode {
+        task: String,
+        mode: String,
+        skip: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
