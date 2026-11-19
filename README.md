@@ -29,13 +29,24 @@ Cada **tarea** tiene su propio git worktree, su propio agente y un layout fijo:
 ## Uso
 
 Dentro de un repositorio git, `qorvi` abre la app. Necesitas al menos un agente ACP en
-la config (ver [`examples/config.example.toml`](examples/config.example.toml)).
+la config (ver [`examples/config.example.toml`](examples/config.example.toml)). Para
+Claude Code: `npm install -g @agentclientprotocol/claude-agent-acp` (Node ≥ 20) y
+
+```toml
+default_agent = "claude"
+
+[agents.claude]
+command = "claude-agent-acp"
+mode = "default"   # pide permiso para editar; sin esto empieza en "auto"
+```
 
 - **Tareas**: `n` (con el prefijo, ver abajo) crea una; `1`…`9` cambia entre ellas. Al
   activar una tarea arrancan su agente (reanudando su sesión), su editor y su terminal.
 - **Agente**: Enter envía, Esc cancela el turno, ↑/↓ + Enter responde a un permiso y
   Shift+Tab cambia el modo de permisos del agente.
-- **Editor y terminal**: reciben teclado, ratón y pegado. Si el programa termina, Enter
+- **Editor y terminal**: el editor es `editor` de la config, `$VISUAL` o `$EDITOR`; si no
+  hay ninguno, el primero que encuentre de nvim, hx, vim, micro, nano y vi (en Windows,
+  también `edit`). Ambos reciben teclado, ratón y pegado. Si el programa termina, Enter
   lo vuelve a abrir. Enter en el explorador abre el archivo en el editor.
 - **Review** (`d`): diff real de la tarea; `c` commit, `m` merge en la rama base (en el
   árbol principal, que debe estar en esa rama), `p` push + PR con `gh`, `x` descartar.

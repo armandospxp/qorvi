@@ -617,8 +617,8 @@ impl Runtime {
                         name.to_string(),
                         pane,
                         Some(
-                            "Sin editor: define `editor` en la config de qorvi o la variable \
-                             $EDITOR."
+                            "Sin editor: no se encontró nvim, hx, vim, micro, nano ni vi. \
+                             Instala uno o define `editor` en la config de qorvi o $EDITOR."
                                 .to_string(),
                         ),
                     ));

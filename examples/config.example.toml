@@ -5,19 +5,31 @@
 
 default_agent = "mi-agente"
 
-# editor = "nvim"                       # por defecto: $VISUAL, $EDITOR
+# editor = "nvim"                       # por defecto: $VISUAL, $EDITOR o el primero de nvim, hx, vim, micro, nano, vi
 # shell = "zsh"                         # por defecto: $SHELL (Windows: pwsh → powershell → cmd)
 copy_files = [".env", ".env.local"]     # se copian al worktree de cada tarea nueva
 # setup = "npm install"                 # se ejecuta en la terminal de cada tarea nueva
 
 # Cada agente es un ejecutable que habla ACP por stdio.
 # Se lanza como lista de argumentos, nunca a través de una shell.
-# Los comandos reales de Claude Code y Codex se añadirán aquí tras el spike de ACP.
 [agents.mi-agente]
 command = "mi-agente-acp"
 args = []
 env = {}
 # mode = "plan"                         # modo de permisos inicial (ids que ofrezca el agente)
+
+# Claude Code, con el adaptador oficial (necesita Node ≥ 20):
+#   npm install -g @agentclientprotocol/claude-agent-acp
+# Usa la sesión con la que ya entraste en `claude`. Sin `mode`, empieza en el modo por
+# defecto del adaptador ("auto"), que edita sin pedir permiso; "default" pide permiso.
+# [agents.claude]
+# command = "claude-agent-acp"
+# mode = "default"
+
+# Codex, con su adaptador (necesita Node ≥ 20 y `codex` con sesión iniciada):
+#   npm install -g @agentclientprotocol/codex-acp
+# [agents.codex]
+# command = "codex-acp"
 
 [keys]
 # style = "auto"                       # auto | direct (Cmd/Ctrl+tecla) | prefix (Ctrl+Space + tecla); QORVI_KEYS tiene prioridad

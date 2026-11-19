@@ -134,10 +134,17 @@ impl Config {
         }
     }
 
-    /// Editor: `editor`, si no `$VISUAL`, si no `$EDITOR` (vacíos cuentan como ausentes).
+    /// Editor: `editor`, si no `$VISUAL`, si no `$EDITOR` (vacíos cuentan como ausentes);
+    /// si no hay ninguno, el primero de [`EDITOR_FALLBACKS`] que esté en el `PATH`.
     pub fn editor_command(&self) -> Option<String> {
         let var = |n: &str| std::env::var(n).ok();
-        resolve_editor(self.editor.as_deref(), var("VISUAL"), var("EDITOR"))
+        resolve_editor(
+            self.editor.as_deref(),
+            var("VISUAL"),
+            var("EDITOR"),
+            cfg!(windows),
+            &in_path,
+        )
     }
 
     /// Shell: `shell`, si no `$SHELL`; en Windows `pwsh`, `powershell` o `cmd`.
@@ -178,14 +185,30 @@ fn non_empty(v: Option<&str>) -> Option<String> {
     v.filter(|s| !s.trim().is_empty()).map(str::to_string)
 }
 
+/// Editores de terminal que se buscan en el `PATH`, en orden, si no hay ninguno
+/// configurado. nvim primero: es el único con el que abrir archivos desde el explorador
+/// va por su servidor y no por teclas.
+pub const EDITOR_FALLBACKS: &[&str] = &["nvim", "hx", "vim", "micro", "nano", "vi"];
+
 fn resolve_editor(
     config: Option<&str>,
     visual: Option<String>,
     editor: Option<String>,
+    windows: bool,
+    in_path: &dyn Fn(&str) -> bool,
 ) -> Option<String> {
     non_empty(config)
         .or_else(|| non_empty(visual.as_deref()))
         .or_else(|| non_empty(editor.as_deref()))
+        .or_else(|| {
+            // En Windows, `edit` (Microsoft Edit) es el editor de terminal del sistema.
+            let windows_only: &[&str] = if windows { &["edit"] } else { &[] };
+            EDITOR_FALLBACKS
+                .iter()
+                .chain(windows_only)
+                .find(|e| in_path(e))
+                .map(|e| e.to_string())
+        })
 }
 
 fn resolve_shell(
@@ -347,11 +370,33 @@ mod tests {
     #[test]
     fn editor_resolucion() {
         let s = |v: &str| Some(v.to_string());
-        assert_eq!(resolve_editor(Some("hx"), s("v"), s("e")), s("hx"));
-        assert_eq!(resolve_editor(None, s("v"), s("e")), s("v"));
-        assert_eq!(resolve_editor(None, s(""), s("e")), s("e"));
-        assert_eq!(resolve_editor(Some(""), None, s("e")), s("e"));
-        assert_eq!(resolve_editor(None, None, s("")), None);
+        let nada = |_: &str| false;
+        let r = |c, v, e| resolve_editor(c, v, e, false, &nada);
+        assert_eq!(r(Some("hx"), s("v"), s("e")), s("hx"));
+        assert_eq!(r(None, s("v"), s("e")), s("v"));
+        assert_eq!(r(None, s(""), s("e")), s("e"));
+        assert_eq!(r(Some(""), None, s("e")), s("e"));
+        assert_eq!(r(None, None, s("")), None);
+    }
+
+    #[test]
+    fn editor_por_defecto_del_path() {
+        let s = |v: &str| Some(v.to_string());
+        let todo = |_: &str| true;
+        let vim_y_nano = |e: &str| e == "vim" || e == "nano";
+        let solo_edit = |e: &str| e == "edit";
+        // Lo configurado gana a lo que haya en el PATH.
+        assert_eq!(resolve_editor(None, None, s("e"), false, &todo), s("e"));
+        assert_eq!(resolve_editor(None, None, None, false, &todo), s("nvim"));
+        assert_eq!(
+            resolve_editor(None, None, None, false, &vim_y_nano),
+            s("vim")
+        );
+        assert_eq!(resolve_editor(None, None, None, false, &solo_edit), None);
+        assert_eq!(
+            resolve_editor(None, None, None, true, &solo_edit),
+            s("edit")
+        );
     }
 
     #[test]

@@ -45,8 +45,13 @@ versionado: [SemVer](https://semver.org/lang/es/).
 - Aviso, una vez por sesión, si la terminal escribe símbolos (`˙`, `∆`…) en lugar de enviar Alt.
 - Pegado con bracketed paste en el chat, el diálogo de tarea nueva y los paneles.
 
+- Config de ejemplo con los comandos de Claude Code (`claude-agent-acp`) y Codex (`codex-acp`).
+- El título del panel del agente muestra el modo de permisos actual.
+- Si no hay editor configurado ni `$VISUAL`/`$EDITOR`, se usa el primero que haya en el `PATH` de nvim, hx, vim, micro, nano y vi (en Windows, también `edit`).
+
 ### Cambiado
 - Las dependencias se compilan optimizadas también en debug: los tests de la TUI pasan de ~90 s a ~10 s.
 
 ### Corregido
+- Si el agente se cierra con error, el aviso incluye su código de salida y las últimas líneas de su stderr (antes solo decía "Incoming transport closed").
 - La CI de Windows fallaba por imports que solo se usan en Unix.

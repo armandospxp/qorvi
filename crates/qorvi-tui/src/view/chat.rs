@@ -296,8 +296,21 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, focused: bool) {
         frame.render_widget(block, area);
         return;
     };
+    // Modo de permisos actual (nombre que da el agente), si lo tiene.
+    let mode = task
+        .mode
+        .as_ref()
+        .map(|m| {
+            let name = task
+                .modes
+                .iter()
+                .find(|x| &x.id == m)
+                .map_or(m.as_str(), |x| x.name.as_str());
+            format!(" · {name}")
+        })
+        .unwrap_or_default();
     let title = format!(
-        " Agente · {} · {} {} ",
+        " Agente · {}{mode} · {} {} ",
         task.agent,
         status_symbol(task.status, state.ascii),
         status_label(task.status)
@@ -366,5 +379,44 @@ pub fn render(state: &AppState, frame: &mut Frame, area: Rect, focused: bool) {
         let col = lines.last().map_or(0, |l| super::text_width(l)) as u16;
         let x = (box_inner.x + col).min(box_inner.right().saturating_sub(1));
         frame.set_cursor_position(Position::new(x, box_inner.y + row));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::demo::demo_state;
+    use crate::state::AgentMode;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    fn title(state: &AppState) -> String {
+        let mut term = Terminal::new(TestBackend::new(80, 6)).unwrap();
+        term.draw(|f| render(state, f, f.area(), false)).unwrap();
+        let buf = term.backend().buffer();
+        (0..80).map(|x| buf[(x, 0)].symbol()).collect()
+    }
+
+    #[test]
+    fn el_titulo_muestra_el_modo_de_permisos() {
+        let mut s = demo_state();
+        s.active = 0;
+        assert!(!title(&s).contains("Manual"));
+        let task = &mut s.tasks[0];
+        task.modes = vec![
+            AgentMode {
+                id: "default".into(),
+                name: "Manual".into(),
+            },
+            AgentMode {
+                id: "auto".into(),
+                name: "Auto".into(),
+            },
+        ];
+        task.mode = Some("default".into());
+        assert!(title(&s).contains(" · Manual · "), "{}", title(&s));
+        // Un modo que el agente no anunció se muestra por su id.
+        s.tasks[0].mode = Some("raro".into());
+        assert!(title(&s).contains(" · raro · "), "{}", title(&s));
     }
 }
